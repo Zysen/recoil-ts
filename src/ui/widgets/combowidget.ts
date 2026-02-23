@@ -1,22 +1,29 @@
 import {Widget} from "./widget.ts";
 import {WidgetScope} from "./widgetscope.ts";
-import {contains, createDom} from "../dom/dom.ts";
+import {contains, createDom, setElementShown} from "../dom/dom.ts";
 import {TagName} from "../dom/tags.ts";
 import {StandardOptions, StandardOptionsType} from "../frp/util.ts";
 import {AttachType} from "../../frp/struct.ts";
+import {EventHandler, EventHelper, Unlistener} from "../eventhelper.ts";
+import {EventType} from "../dom/eventtype.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import { Behaviour } from "../../frp/frp.ts";
+import {WidgetHelper} from "../widgethelper.ts";
 
 /**
- *
- * @template T
- * @param {!recoil.ui.WidgetScope} scope
- * @param {!recoil.ui.Widget} mainWidget
- * @param {function(?)=} opt_forceSet
- * @implements {recoil.ui.Widget}
- * @constructor
+ * like a selectWidget but the mainWidget is the text entry box, this allows
  */
 export class ComboWidget extends Widget {
     private widgetDiv_: HTMLDivElement;
     private menu_: HTMLDivElement;
+    private mainWidget_: Widget;
+    private enabled_ = true;
+    private enabledB_?:Behaviour<BoolWithExplanation>;
+    private itemCount_:number;
+    private forceSet_: (v: any) => void;
+    private listening_:Unlistener|null = null;
+    private helper_: WidgetHelper;
+    private button_: HTMLSpanElement;
 
     constructor(scope: WidgetScope, mainWidget: Widget, opt_forceSet?: (v: any) => void) {
         let widgetDiv = createDom(TagName.DIV, {class: 'recoil-combobox-widget'});
@@ -24,27 +31,24 @@ export class ComboWidget extends Widget {
         this.forceSet_ = opt_forceSet ||  (() => {});
         this.widgetDiv_ = widgetDiv;
         this.menu_ = createDom(TagName.DIV, {class: 'recoil-combomenu-list'});
-        this.menu_.setFocusable(false);
-
-        this.menu_.setVisible(false);
+        setElementShown(this.menu_, false);
         this.enabled_ = true;
-        this.container_.addChild(this.menu_, true);
+        this.getElement().appendChild(this.menu_);
         this.itemCount_ = 0;
         this.listening_ = null;
 
         this.mainWidget_ = mainWidget;
-        mainWidget.getComponent().render(this.widgetDiv_);
-        this.button_ = goog.dom.createDom(
-            goog.dom.TagName.SPAN, goog.getCssName('goog-combobox-button'));
-        goog.dom.setTextContent(this.button_, '\u25BC');
-        goog.style.setUnselectable(this.button_, true /* unselectable */);
+        this.widgetDiv_.appendChild(mainWidget.getElement());
 
-        this.containerDiv_.appendChild(this.button_);
+        this.button_ = createDom(
+            TagName.SPAN, {class: 'recoil-combobox-button'}, '\u25BC');
+
+        this.getElement().appendChild(this.button_);
 
         this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, this.updateState_, this.dispose_);
 
         // this.changeHelper_ = new recoil.ui.EventHelper(scope, this.selector_, goog.ui.Component.EventType.ACTION);
-        this.changeHelper_ = new recoil.ui.EventHelper(scope, this.menu_, goog.ui.Component.EventType.ACTION);
+        this.changeHelper_ = new EventHelper(scope, this.menu_, EventType.ACTION);
         this.enabledHelper_ = new recoil.ui.TooltipHelper(scope, this.container_, this.container_.getElement());
         goog.events.listen(
             this.button_, goog.events.EventType.MOUSEDOWN,
@@ -110,13 +114,14 @@ export class ComboWidget extends Widget {
             // received after the click event that invokes this function. Since we want
             // to cancel the dismissal after the blur event is processed, we have to
             // wait for all event processing to happen.
+
             goog.Timer.callOnce(this.clearDismissTimer_, 1, this);
 
             this.showMenu_();
         }
 
         this.positionMenu();
-    };
+    }
 
     /**
      * Show the menu and add an active class to the combo box's element.
@@ -214,7 +219,7 @@ export class ComboWidget extends Widget {
         this.enabledHelper_.attach(
             /** @type {!recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>} */ (this.enabledB_),
             this.helper_);
-    };
+    }
 
     /**
      * Number of milliseconds to wait before dismissing combowidget after blur.
@@ -231,7 +236,7 @@ export class ComboWidget extends Widget {
         this.clearDismissTimer_();
         this.dismissTimer_ = goog.Timer.callOnce(
             this.dismiss, recoil.ui.widgets.ComboWidget.BLUR_DISMISS_TIMER_MS, this);
-    };
+    }
 
     /**
      * Event handler for when the input box looses focus -- hide the menu
@@ -240,7 +245,7 @@ export class ComboWidget extends Widget {
      */
     private onFocus_(e) {
         this.clearDismissTimer_();
-    };
+    }
 
     /**
      * @template T
@@ -262,7 +267,7 @@ export class ComboWidget extends Widget {
             item.setEnabled(false);
         }
         return item;
-    };
+    }
 
     /**
      * Event handler for when the document is clicked.
@@ -285,7 +290,7 @@ export class ComboWidget extends Widget {
             goog.events.unlistenByKey(this.listening_);
             this.listening_ = null;
         }
-    };
+    }
 
     /**
      *
@@ -295,8 +300,7 @@ export class ComboWidget extends Widget {
     private updateState_(helper) {
         var me = this;
         if (!this.listening_) {
-            this.listening_ = goog.events.listen(document, goog.events.EventType.MOUSEDOWN,
-                this.onDocClicked_.bind(this));
+            this.listening_ = EventHelper.listen(document, EventType.MOUSEDOWN,           this.onDocClicked_.bind(this));
         }
         var enabled = false;
         var editable = true;

@@ -19,7 +19,7 @@
  * @see ../demos/keyhandler.html
  */
 
-import {userAgent} from "./useragent";
+import {userAgent} from "./useragent.ts";
 type BrowserEvent = MouseEvent|KeyboardEvent|SubmitEvent|Event|InputEvent|FocusEvent;
 /**
  * Key codes for common characters.
@@ -29,6 +29,10 @@ type BrowserEvent = MouseEvent|KeyboardEvent|SubmitEvent|Event|InputEvent|FocusE
  *
  * @enum {number}
  */
+export class Keys {
+    static ENTER = "Enter";
+    static SHIFT = "Enter";
+}
 export class KeyCodes {
     static readonly WIN_KEY_FF_LINUX = 0;
     static readonly MAC_ENTER = 3;
@@ -277,7 +281,6 @@ export class KeyCodes {
             case "Home":
             case "Insert":
             case "ArrowLeft":
-            case "Meta":
             case "NumLock":
             case "Clear":
             case "PageDown":

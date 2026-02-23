@@ -1,76 +1,27 @@
-goog.provide('recoil.ui.widgets.table.PasswordColumn');
+import {ColumnBase, LabelType} from "./column.ts";
+import {ColumnKey} from "../../../structs/table/columnkey.ts";
+import {removeUndefined} from "../../../util/object.ts";
+import {WidgetScope} from "../widgetscope.ts";
+import {Behaviour} from "../../../frp/frp.ts";
+import {TableCell} from "../../../structs/table/table.ts";
+import {Widget} from "../widget.ts";
+import {TableCellHelper} from "../../../frp/table.ts";
+import {PasswordWidget} from "../passwordwidget.ts";
 
-goog.require('recoil.frp.Behaviour');
-goog.require('recoil.frp.struct');
-goog.require('recoil.ui.BoolWithExplanation');
-goog.require('recoil.ui.widgets.PasswordWidget');
-goog.require('recoil.ui.widgets.table.Column');
+export class PasswordColumn extends ColumnBase<string> {
+    constructor(key:ColumnKey<string>, name:LabelType, opt_maxChars?:number, opt_editable?:boolean) {
+        super(key, name, PasswordColumn.defaultWidgetFactory,
+            removeUndefined({
+                maxChars: opt_maxChars,
+                editable: opt_editable
+            }));
+    }
 
+     static defaultWidgetFactory<Type>  (scope:WidgetScope, cellB:Behaviour<TableCell<Type>>):Widget {
+            let frp = scope.getFrp();
+            let widget = new PasswordWidget(scope);
+            widget.attachStruct(TableCellHelper.getMetaValue(cellB));
+            return widget;
+     }
 
-/**
- * @implements {recoil.ui.widgets.table.Column}
- * @template T
- * @constructor
- * @param {recoil.structs.table.ColumnKey} key
- * @param {string} name
- * @param {number=} opt_maxChars
- * @param {boolean=} opt_editable
- *
- */
-recoil.ui.widgets.table.PasswordColumn = function(key, name, opt_maxChars, opt_editable) {
-    this.meta_ = recoil.util.object.removeUndefined(
-        {maxChars: opt_maxChars,
-            editable: opt_editable});
-    this.key_ = key;
-    this.name_ = name;
-};
-
-/**
- * adds all the meta information that a column should need
- * this should at least include cellWidgetFactory
- * other meta data can include:
- *   headerDecorator
- *   cellDecorator
- * and anything else specific to this column such as options for a combo box
- *
- * @param {Object} curMeta
- * @return {Object}
- */
-recoil.ui.widgets.table.PasswordColumn.prototype.getMeta = function(curMeta) {
-    var meta = {name: this.name_,
-        cellWidgetFactory: recoil.ui.widgets.table.PasswordColumn.defaultWidgetFactory_};
-
-    goog.object.extend(meta, this.meta_, curMeta);
-    return meta;
-};
-
-/**
- * @private
- * @param {!recoil.ui.WidgetScope} scope
- * @param {!recoil.frp.Behaviour<recoil.structs.table.TableCell>} cellB
- * @return {!recoil.ui.Widget}
- */
-recoil.ui.widgets.table.PasswordColumn.defaultWidgetFactory_ =
-    function(scope, cellB)
-    {
-        var frp = scope.getFrp();
-        var widget = new recoil.ui.widgets.PasswordWidget(scope);
-        var value = recoil.frp.table.TableCell.getValue(frp, cellB);
-
-        var metaData = recoil.frp.table.TableCell.getMeta(frp, cellB);
-        widget.attachStruct(recoil.frp.struct.extend(frp, metaData, {value: value}));
-        return widget;
-    };
-/**
- * @param {!recoil.ui.WidgetScope} scope
- * @param {!recoil.frp.Behaviour<recoil.structs.table.TableCell>} cellB
- * @return {!recoil.ui.Widget}
- */
-recoil.ui.widgets.table.PasswordColumn.defaultWidgetFactory = recoil.ui.widgets.table.PasswordColumn.defaultWidgetFactory_;
-
-/**
- * @return {recoil.structs.table.ColumnKey}
- */
-recoil.ui.widgets.table.PasswordColumn.prototype.getKey = function() {
-    return this.key_;
-};
+}

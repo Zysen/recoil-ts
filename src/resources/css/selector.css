@@ -1,0 +1,65 @@
+.recoil-select {
+    position: relative;
+    display: inline-block;
+    width: 220px;
+    user-select: none;
+    cursor: pointer;
+}
+.recoil-select-selected {
+    padding: 8px 32px 8px 8px; /* room for arrow */
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    position: relative;
+}
+
+div.recoil-select-selected:focus {
+    outline: 1px auto -webkit-focus-ring-color; /* Chrome/Safari */
+    outline: 1px auto Highlight;               /* Firefox/Edge/IE */
+}
+
+.recoil-select-selected::after {
+    content: "▼"; /* arrow */
+    font-size: 12px;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+.recoil-select-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    display: none;
+    z-index: 100;
+    margin-top: 1px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    max-height: calc(-10px + 100vh);
+    max-width: calc(-10px + 100vw);
+    overflow: auto;
+}
+
+.recoil-selector-option {
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.recoil-selector-option:hover {
+    background: #eee;
+}
+
+.recoil-selector-option.recoil-selected {
+    font-weight: bold;
+}
+
+.recoil-selector-option.recoil-highlighted {
+    outline: 1px auto -webkit-focus-ring-color; /* Chrome/Safari */
+    outline: 1px auto Highlight;               /* Firefox/Edge/IE */
+}

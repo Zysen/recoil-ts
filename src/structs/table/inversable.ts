@@ -3,7 +3,7 @@
  * T is the result type
  * Output is the type of objects to set
  */
-import {Behaviour, Frp} from "../../frp/frp";
+import {Behaviour, BehaviourList1, Frp} from "../../frp/frp";
 import {StructType} from "../../frp/struct";
 
 type LimitedRecord<T extends Record<string, any>> = {
@@ -17,10 +17,7 @@ type RecordWithBehaviour <T extends Record<string, any>> = {
 
 
 export interface Inversable<T, Input extends Record<any, any>> {
-
     calculate(params: Input): T;
-
-
     inverse(val: T, sources: Input): Partial<Input>;
 }
 /**
@@ -62,7 +59,7 @@ export function create<T, Input extends LimitedRecord<Input>>(frp:Frp, inversabl
         for (let k in res) {
             paramStruct[k].set(res[k]);
         }
-    }, ... funcParams);
+    }, ...(funcParams as BehaviourList1));
 }
 
 

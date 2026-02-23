@@ -1,7 +1,7 @@
-import {StructType} from "../../frp/struct";
-import {compare, compareAll, isEqual} from "../../util/object";
-import {AvlTree} from "../avltree";
-import {ColumnKey} from "./columnkey";
+import {type StructType} from "../../frp/struct.ts";
+import {compare, compareAll, isEqual} from "../../util/object.ts";
+import {AvlTree} from "../avltree.ts";
+import {ColumnKey} from "./columnkey.ts";
 
 export type KeyedMeta = {
     key: ColumnKey<any>;
@@ -40,6 +40,8 @@ export interface TableRowInterface {
     get<T>(key: ColumnKey<T>): T | null;
 
     getCell<T>(key: ColumnKey<T>): TableCell<T> | null;
+
+    getCellMeta<T>(key:ColumnKey<T>): StructType|null;
 
     columns(): Iterable<{ meta: StructType, key: ColumnKey<any> }>;
 

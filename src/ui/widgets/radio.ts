@@ -6,14 +6,11 @@
 
 import {Widget} from "./widget.ts";
 import {
-    getGroup,
-    Options,
     StandardOptions,
     getStandardOptionsGroup,
     StandardOptionsBoundType,
     StandardOptionsType
 } from "../frp/util.ts";
-import {BoolWithExplanation} from "../booleanwithexplain.ts";
 import {WidgetHelper} from "../widgethelper.ts";
 import {EnabledTooltipHelper} from "../tooltiphelper.ts";
 import {createDom} from "../dom/dom.ts";
@@ -21,7 +18,7 @@ import {TagName} from "../dom/tags.ts";
 import {WidgetScope} from "./widgetscope.ts";
 import {AttachType} from "../../frp/struct.ts";
 import {Behaviour} from "../../frp/frp.ts";
-import {EventHandler, EventHelper} from "../eventhelper.ts";
+import {EventHelper} from "../eventhelper.ts";
 import {EventType} from "../dom/eventtype.ts";
 import {isEqual} from "../../util/object.ts";
 
@@ -33,9 +30,9 @@ import {isEqual} from "../../util/object.ts";
  * @constructor
  */
 export class RadioWidget<T> extends Widget {
-    private radio_:HTMLInputElement;
-    private helper_: WidgetHelper;
-    private tooltip_: EnabledTooltipHelper
+    private readonly radio_:HTMLInputElement;
+    private readonly helper_: WidgetHelper;
+    private readonly tooltip_: EnabledTooltipHelper
     private valueB_?:Behaviour<T>;
     private configB_?:Behaviour<{
         optionValue: T,
@@ -49,10 +46,6 @@ export class RadioWidget<T> extends Widget {
         this.tooltip_ = new EnabledTooltipHelper(scope, this.getElement(), this.radio_);
     }
 
-
-    /**
-     * @type {OptionsType}
-     */
     static options =
         StandardOptions(
             'value', // the value that is currently selected

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {BStatus, Frp} from "./frp.ts";
-import {create, extend, FLATTEN, flatten, getBehaviours, getWithStatusIfNotGood, NO_FLATTEN} from "./struct.ts";
+import {create, extend, FLATTEN, flatten, getBehaviours, NO_FLATTEN} from "./struct.ts";
 
 import * as struct  from "./struct.ts";
 

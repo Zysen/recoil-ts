@@ -18,11 +18,11 @@
  * @author eae@google.com (Emil A Eklund)
  */
 
-import {AbstractPosition} from "./abstractposition";
-import {Coordinate} from "../dom/coordinate";
-import {Corner, positionAtCoordinate} from "./positioning";
-import {Box} from "../dom/box";
-import {Size} from "../dom/size";
+import {AbstractPosition} from "./abstractposition.ts";
+import {Coordinate} from "../dom/coordinate.ts";
+import {Corner, positionAtCoordinate} from "./positioning.ts";
+import {Box} from "../dom/box.ts";
+import {Size} from "../dom/size.ts";
 
 /**
  * Encapsulates a popup position where the popup absolutely positioned by

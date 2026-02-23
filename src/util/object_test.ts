@@ -2,8 +2,32 @@ import assert from 'assert/strict';
 import test from 'node:test';
 
 
-import {isEqual, toString, compare, clone} from './object.ts'
+import {isEqual, toString, compare, clone, makeEqualFunc} from './object.ts'
 
+test("func equal", () => {
+    let f1 = () => {
+    };
+    let f2 = () => {
+    };
+    let f3 = () => {
+    };
+    let f4 = () => {
+    };
+    assert.equal(isEqual(f1, f2), false);
+    let id = Symbol();
+    let id2 = Symbol();
+    makeEqualFunc(f1, id, 1);
+    makeEqualFunc(f2, id, 1);
+    makeEqualFunc(f3, id, 2);
+    makeEqualFunc(f4, id2, 1);
+    assert.equal(isEqual(f1, f2), true);
+    assert.equal(isEqual(f2, f1), true);
+    assert.equal(isEqual(f1, f3), false);
+    assert.equal(isEqual(f3, f1), false);
+    assert.equal(isEqual(f1, f4), false);
+    assert.equal(isEqual(f4, f1), false);
+
+});
 test("test equal", () => {
     const overrideEquals = {
         equals: function () {
@@ -129,6 +153,13 @@ test("compare", () => {
     assert.equal(compare([1, 2, 3], [1, 2, 3]), 0);
     semetricCompare([1, 2, 3], [1, 2, 3, 4], -1);
 
+    let f1 = () => true;
+    let f2 = () => false;
+    res = compare(f1, f2);
+    assert.equal(res != 0, true);
+    assert.equal(compare(f2, f1) == -res, true);
+    assert.equal(compare(f1, f1) == 0, true);
+    assert.equal(compare(f2, f2) == 0, true);
     assert.equal(compare(1, 1), 0);
     semetricCompare(1, 2, -1);
 
@@ -170,20 +201,22 @@ test("compare", () => {
 test("clone", () => {
     class O1 {
         private a_: any;
+
         constructor(a: any) {
             this.a_ = a;
         }
+
         getA() {
             return this.a_;
         }
-        setA(a:any) {
+
+        setA(a: any) {
             this.a_ = a;
         }
     }
 
 
-
-    let x : any = new O1(1);
+    let x: any = new O1(1);
     let arr = [1, 2, 3];
 
     let cloneX: any = clone(x);
@@ -199,7 +232,7 @@ test("clone", () => {
 
     assert.deepEqual(arr, cloneArr, "array equals");
 
-    let a :any = {n: 'a', x: null, y: undefined};
+    let a: any = {n: 'a', x: null, y: undefined};
     let b = {n: 'b', v: a};
     a.v = b;
     //test a loop
@@ -208,7 +241,7 @@ test("clone", () => {
     cloneX.f = 1;
     assert.equal(cloneX.v.v.f, 1, "set");
     assert.equal(cloneX.x === null, true, "null check");
-    assert.equal(cloneX.hasOwnProperty('y'), true,"undefined exists check");
+    assert.equal(cloneX.hasOwnProperty('y'), true, "undefined exists check");
     assert.equal(cloneX.y === undefined, true, "undefined check");
     assert.equal(cloneX.v.v === cloneX, true, "loop 1");
     assert.equal(cloneX.v === cloneX.v.v.v, true, "loop 2");
@@ -219,7 +252,7 @@ test("clone", () => {
     let src = (function () {
         var a = 1;
         return {
-            setA: function (v:any) {
+            setA: function (v: any) {
                 a = v;
             },
             getA: function () {
@@ -233,7 +266,7 @@ test("clone", () => {
     assert.deepEqual(cloneX, src);
     assert.equal(1, src.getA(), "good get src");
     cloneX.setA(2);
-    assert.equal(cloneX.getA(), 2,"good get clone");
+    assert.equal(cloneX.getA(), 2, "good get clone");
 //    assertEquals("bad get src", 1, src.getA());
 
 

@@ -6,27 +6,19 @@ import {StringConverter} from "../../converters/stringconverter.ts";
 import {makeStructColumn} from "./table/column.ts";
 import { UnconvertType } from "../../converters/typeconverter.ts";
 import {Messages} from "../messages.ts";
-import {extend} from "../../frp/struct.ts";
+import {type AttachType, extend} from "../../frp/struct.ts";
+import {ExpParser} from "../../util/tokenizer.ts";
+import {Chooser} from "../../frp/chooser.ts";
+import {Message} from "../message.ts";
+import {ErrorType} from "../../frp/frp.ts";
 
-/**
- *
- * @param {!recoil.ui.WidgetScope} scope
- * @constructor
- * @implements {recoil.ui.Widget}
- */
 export class ExprWidget extends Widget {
-    private input_:InputWidget;
+    private readonly input_:InputWidget;
 
     constructor(scope: WidgetScope) {
         let input = new InputWidget(scope);
         super(scope, input.getElement())
         this.input_ = input;
-        let frp = scope.getFrp();
-        this.erroredB_ = frp.createB(false);
-
-        this.containerDiv_ = goog.dom.createDom('div');
-
-
     }
 
 
@@ -37,11 +29,18 @@ export class ExprWidget extends Widget {
         decimalPlaces: null
     });
 
-    /**
-     *
-     * @param {!Object| !recoil.frp.Behaviour<Object>} options
-     */
-    attachStruct(options) {
+    attachStruct(options:AttachType<{
+        value: string,
+        classes?: string[],
+        placeholder?: string | Message, // default null
+        immediate?: boolean, // default true
+        converter?: StringConverter<string>,
+        maxLength?: number,
+        outErrors?: ErrorType[],
+        displayLength?: number,
+        spellcheck?: boolean,
+        charValidator?: (c: string) => boolean,
+    }>) {
         let frp = this.scope_.getFrp();
 
         let bound = ExprWidget.options.bind(frp, options);
@@ -59,64 +58,44 @@ export class ExprWidget extends Widget {
                     this.input_.getFocus(), defConverter, expConverterB)
             });
 
-        this.input_.attachStruct(modOptions);
+        this.input_.attachStruct(modOptions as any);
     }
 }
 
-export class ExprConverter implements StringConverter<string> {
-    private decimalPlaces_: number | undefined;
+export class ExprConverter implements StringConverter<string|null> {
+    private readonly decimalPlaces_: number | undefined;
 
     constructor(decimalPlaces?: number) {
         this.decimalPlaces_ = decimalPlaces;
     }
 
-    /**
-     * @param {string} val
-     * @return {string}
-     */
-    convert(val: string | undefined) {
+    convert(val: string | null): string {
         if (val == undefined) {
             return '';
         }
-        let res = ExpParser.instance.eval(val);
+        let res = new ExpParser().eval(val);
         if (res == undefined) {
             return val;
         }
 
         return this.decimalPlaces_ == null ? res + '' : res.toFixed(this.decimalPlaces_) + '';
     }
-
-
-    /**
-     * @param {string} val
-     * @return {{error : recoil.ui.message.Message, value : string, supported: (undefined|boolean), settable: (undefined|boolean)}}
-     */
-    unconvert(val: string | undefined) {
-        let err = null;
-        let res = recoil.util.ExpParser.instance.eval(val);
+    unconvert(val: string): UnconvertType<string | null> {
+        let res = new ExpParser().eval(val || '');
         if (res == undefined || isNaN(res)) {
-            err = recoil.ui.messages.NOT_APPLICABLE.toString();
+            return {error: Messages.NOT_APPLICABLE};
         }
 
-        return {error: null, supported: false, value: val};
+        return {value: val};
     }
 
-
 }
-
-
-/**
- * @constructor
- * @implements {recoil.converters.StringConverter<string>}
- */
 
 export class ExprFocusStringConverter implements StringConverter<string> {
     convert(val: string): string {
         return val != undefined ? val : '';   }
     unconvert(val: string): UnconvertType<string> {
-        let res = ExpParser.instance.eval(val);
-        let err = null;
-
+        let res = new ExpParser().eval(val);
         if (res == null) {
             return {error:Messages.INVALID_EXPRESSION, value:val, settable:true};
 
@@ -126,12 +105,4 @@ export class ExprFocusStringConverter implements StringConverter<string> {
 
 }
 
-/**
- * @implements {recoil.ui.widgets.table.Column}
- * @template T
- * @constructor
- * @param {!recoil.structs.table.ColumnKey} key
- * @param {!recoil.ui.message.Message|string} name
- * @param {Object=} opt_meta
- */
 export const ExprColumns = makeStructColumn(ExprWidget);

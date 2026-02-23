@@ -1,9 +1,9 @@
 import {WidgetScope} from "./widgetscope";
 import {Widget} from "./widget";
-import {append, contains, createDom, removeNode} from "../dom/dom";
+import {contains, createDom, removeNode} from "../dom/dom";
 import {TagName} from "../dom/tags";
-import {AttachableWidget, getGroup, Options, StandardOptions} from "../frp/util";
-import {AttachType, BehaviourOrType} from "../../frp/struct";
+import {AttachableWidget, getGroup, StandardOptions} from "../frp/util";
+import {AttachType} from "../../frp/struct";
 import {WidgetHelper} from "../widgethelper";
 import {enable, setAll} from "../dom/classlist";
 import {Message} from "../message";
@@ -72,7 +72,7 @@ export class Checkbox extends Widget implements AttachableWidget {
         this.tooltipHelper_.attach(this.configB_, this.helper_);
     }
 
-    private updateState_(helper: WidgetHelper) {
+    private updateState_() {
         let editable = this.configB_?.good() ? this.configB_?.get().editable : true;
         let defined = this.valueB_?.good() ? this.valueB_.get() : null;
         this.checkbox_.checked = defined == null || defined;

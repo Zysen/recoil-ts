@@ -4,11 +4,11 @@
  * however the meta data will be read only
  */
 
-import {BehaviourOrType, StructType} from "./struct";
-import {Behaviour, BStatus, Frp} from "./frp";
-import {Table, TableCell, TableInterface, TableRow, TableRow as TRow} from "../structs/table/table";
-import {getFrp, Util} from "./util";
-import {ColumnKey} from "../structs/table/columnkey";
+import {BehaviourOrType, StructType} from "./struct.ts";
+import {Behaviour, BStatus, Frp, TypedBehaviourList} from "./frp.ts";
+import {Table, TableCell, TableInterface, TableRow, TableRow as TRow} from "../structs/table/table.ts";
+import {getFrp, Util} from "./util.ts";
+import {ColumnKey} from "../structs/table/columnkey.ts";
 
 
 /**
@@ -41,16 +41,14 @@ export class TableRowHelper {
 
     static get<T>(row: BehaviourOrType<TRow>, columnKey: BehaviourOrType<ColumnKey<T>>): Behaviour<T> {
         let frp = getFrp([row, columnKey]);
-        let util = new Util(frp);
+        let rowB:Behaviour<TRow> = frp.toBehaviour(row);
+        let columnB = frp.toBehaviour(columnKey);
 
-        let rowB = util.toBehaviour(row);
-        let columnB = util.toBehaviour(columnKey);
-
-        return frp.liftBI(
-            function (row, column) {
-                return row.get(column);
+        return frp.liftBI<T,T,[Behaviour<TRow>, Behaviour<ColumnKey<T>>]>(
+            (row:TRow, column:ColumnKey<T>):T => {
+                return row.get(column) as T;
             },
-            function (val) {
+            function (val:T) {
                 rowB.set(rowB.get().set(columnB.get(), val));
             }, rowB, columnB);
     }
@@ -59,7 +57,7 @@ export class TableRowHelper {
     /**
      * like get but allows null rows, this is not inversable for now
      */
-    static safeGet<T>(row: BehaviourOrType<TRow>, columnKey: BehaviourOrType<ColumnKey<T>>): Behaviour<T> {
+    static safeGet<T>(row: BehaviourOrType<TRow>, columnKey: BehaviourOrType<ColumnKey<T>>): Behaviour<T|null> {
         let frp = getFrp([row, columnKey]);
         let util = new Util(frp);
 
@@ -67,7 +65,7 @@ export class TableRowHelper {
         let columnB = util.toBehaviour(columnKey);
 
         return frp.liftB(
-            function (row, column) {
+            function (row:TableRow, column) {
                 if (!row) {
                     return null;
                 }
@@ -84,14 +82,13 @@ export class TableRowHelper {
  **/
 export class TableCellHelper {
     static create<T>(frp: Frp, tableV: BehaviourOrType<Table>, keysV: BehaviourOrType<any[]>, columnV: BehaviourOrType<ColumnKey<T>>) {
-        let util = new Util(frp);
-        let tableB = util.toBehaviour(tableV);
-        let keysB = util.toBehaviour(keysV);
+        let tableB = frp.toBehaviour(tableV);
+        let keysB = frp.toBehaviour(keysV);
 
-        let columnB = util.toBehaviour(columnV);
-
-        return frp.liftBI<TableCell<T>>(
-            function (table: Table, keys: any[], column: ColumnKey<T>): TableCell<T> {
+        let columnB = frp.toBehaviour(columnV);
+//, keys: any[], column: ColumnKey<T>
+        return frp.liftBI<TableCell<T>, TableCell<T>, TypedBehaviourList<[Table,any[],ColumnKey<T>]>>(
+            (table: Table,keys: any[], column :ColumnKey<T>): TableCell<T> =>{
                 let cell = table.getCell(keys, column);
                 let tableMeta = table.getMeta();
                 let rowMeta = table.getRowMeta(keys);
@@ -103,11 +100,11 @@ export class TableCellHelper {
                 return cell.setMeta(meta);
 
             },
-            function (val: TableCell<T>) {
+            ((val: TableCell<T>)=> {
                 let mTable = tableB.get().unfreeze();
                 mTable.setCell(keysB.get(), columnB.get(), val);
                 tableB.set(mTable.freeze());
-            }, tableB, keysB, columnB);
+            }) as any, tableB, keysB, columnB);
     }
 
     /**
@@ -115,18 +112,17 @@ export class TableCellHelper {
      * cell, column, row, and table. Setting the meta data will have no effect
      *
      **/
-    static createHeader(frp: Frp, tableV: BehaviourOrType<Table>, columnV: BehaviourOrType<ColumnKey<any>>) {
+    static createHeader<T>(frp: Frp, tableV: BehaviourOrType<Table>, columnV: BehaviourOrType<ColumnKey<T>>):Behaviour<TableCell<undefined>> {
         let util = new Util(frp);
 
         let tableB = util.toBehaviour(tableV);
         let columnB = util.toBehaviour(columnV);
 
-        return frp.liftB(
-            function (table, column) {
+        return frp.liftB((table:Table, column:ColumnKey<any>)=> {
                 let tableMeta = table.getMeta();
                 let columnMeta = table.getColumnMeta(column);
                 let meta = {...tableMeta, ...columnMeta};
-                return new TableCell(undefined, meta);
+                return new TableCell<undefined>(undefined, meta);
             }, tableB, columnB);
 
     }
@@ -159,6 +155,21 @@ export class TableCellHelper {
             }, (meta: StructType) => {
                 if (cellB.good()) {
                     cellB.set(cellB.get().setMeta(meta));
+                }
+            },
+            cellB);
+    }
+
+    static getMetaValue<Type extends StructType = StructType>(cellB: Behaviour<TableCell<any>>, valueName:string = 'value'): Behaviour<Type> {
+        let frp = cellB.frp();
+        return frp.liftBI(
+            (cell: TableCell<any>):Type => {
+                return {...cell.getMeta(), [valueName]: cell.getValue()} as Type;
+            }, (both: Type) => {
+                if (cellB.good()) {
+                    let clone = {...both};
+                    delete clone[valueName];
+                    cellB.set(new TableCell(both[valueName], clone));
                 }
             },
             cellB);

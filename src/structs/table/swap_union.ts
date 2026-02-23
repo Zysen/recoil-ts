@@ -2,7 +2,7 @@ import {create, Inversable} from "./inversable";
 import {ColumnKey} from "./columnkey";
 import {MutableTable, Table, TableRow} from "./table";
 import {Order} from "./order";
-import {Behaviour} from "../../frp/frp";
+import {Behaviour, BehaviourList1} from "../../frp/frp";
 import {BehaviourOrType} from "../../frp/struct";
 
 
@@ -84,7 +84,7 @@ export class SwapUnion implements Inversable<Table, {tables:Table[]}> {
     static createB(idCols:ColumnKey<any>[], srcFunc:(r:TableRow) => number, first:Behaviour<Table>, ...rest:BehaviourOrType<Table>[]) {
         let frp = first.frp();
 
-        let tables:Behaviour<Table>[] = [first].concat(rest.map(v => frp.toBehaviour(v)));
+        let tables = [first].concat(rest.map(v => frp.toBehaviour(v))) as BehaviourList1<Table>;
 
 
         let tablesB = frp.liftBI(

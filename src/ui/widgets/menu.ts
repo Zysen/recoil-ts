@@ -14,6 +14,7 @@ import {Corner} from "../positioning/positioning.ts";
 import {MenuAnchoredPosition} from "../positioning/menuanchoredposition.ts";
 import {isEqual} from "../../util/object.ts";
 import {EnabledTooltipHelper} from "../tooltiphelper.ts";
+import {Handle} from "../../util/handle.ts";
 
 
 type RenderedMenuButton = {
@@ -43,7 +44,7 @@ function defaultBarRenderer ():Node|null {
 }
 
 export class MenuBarWidget extends Widget {
-    private menuBar_:HTMLDivElement;
+    private readonly menuBar_:HTMLDivElement;
     private configHelper_: WidgetHelper;
     private stateHelper_: WidgetHelper;
     private menusB_?: Behaviour<MenuButtonWidget<any>>;
@@ -100,7 +101,7 @@ export class MenuBarWidget extends Widget {
         }
     }
 
-    private updateState_(helper: WidgetHelper, menusB: Behaviour<MenuButtonWidget<any>[]>, enabledB: Behaviour<BoolWithExplanation>) {
+    private updateState_(helper: WidgetHelper, menusB: Behaviour<MenuButtonWidget<any>[]>) {
         if (this.menuBar_) {
 
             //this.menuBar_.setEnabled(helper.isGood() && enabledB.get());
@@ -120,16 +121,9 @@ export class MenuBarWidget extends Widget {
         }
     }
 }
-
-
-/**
- * @constructor
- * @implements recoil.ui.Widget
- * @param {!recoil.ui.WidgetScope} scope
- */
 export class MenuButtonWidget<Type> extends Widget {
     private rendererB_?: Behaviour<MenuButtonRenderer>;
-    private stateHelper_: WidgetHelper;
+    private readonly stateHelper_: WidgetHelper;
     private nameB_?:Behaviour<Type>;
     private classesB_?:Behaviour<string[]>;
     private itemsB_?:Behaviour<MenuItemWidget[]>;
@@ -184,6 +178,7 @@ export class MenuButtonWidget<Type> extends Widget {
             action: null,
             renderer: defaultButtonRenderer,
             classes: ['recoil-menu-button'],
+            enabled: BoolWithExplanation.TRUE
         }
     );
 
@@ -197,7 +192,7 @@ export class MenuButtonWidget<Type> extends Widget {
         items: MenuItemWidget[],
         action?: any,
         tooltip?: Message|string,
-        enabled:BoolWithExplanation,
+        enabled?:BoolWithExplanation,
     }>) {
         let frp = this.scope_.getFrp();
 
@@ -224,13 +219,7 @@ export class MenuButtonWidget<Type> extends Widget {
 
         }
     }
-
-    /**
-     *
-     * @param {recoil.ui.WidgetHelper} helper
-     * @private
-     */
-    private updateState_(helper:WidgetHelper) {
+  private updateState_(helper:WidgetHelper) {
         WidgetHelper.updateClasses(this.getElement(), this.classesB_);
         removeChildren(this.getElement());
 
@@ -247,15 +236,12 @@ export class MenuButtonWidget<Type> extends Widget {
     }
 }
 
-interface MenuItemWidget {
+export interface MenuItemWidget {
     getElement(): Element;
 }
 
 /**
  * looks like a top level menu but is actually just button
- * @constructor
- * @implements recoil.ui.Widget
- * @param {!recoil.ui.WidgetScope} scope
  */
 export class MenuActionWidget extends Widget {
     private eventHelper_: EventHandler;
@@ -263,9 +249,9 @@ export class MenuActionWidget extends Widget {
     private nameB_?:Behaviour<string|Message>
     private enabledB_?:Behaviour<BoolWithExplanation>;
     private rendererB_?:Behaviour<MenuRenderer>;
-    private stateHelper_: WidgetHelper;
-    private actionHelper_: WidgetHelper;
-    private enabledHelper_: EnabledTooltipHelper;
+    private readonly stateHelper_: WidgetHelper;
+    private readonly actionHelper_: WidgetHelper;
+    private readonly enabledHelper_: EnabledTooltipHelper;
     private curName_?: string|Message;
     private curRenderer_?:MenuRenderer;
 
@@ -291,7 +277,6 @@ export class MenuActionWidget extends Widget {
 
     /**
      * Associates a list of menu items widget with this Menu Widget
-     * @param {!Object| !recoil.frp.Behaviour<Object>} options
      */
     attachStruct(options: AttachType<{
         name: Message | string,
@@ -318,11 +303,6 @@ export class MenuActionWidget extends Widget {
         this.enabledHelper_.attach(this.enabledB_, this.stateHelper_, this.actionHelper_);
     }
 
-    /**
-     *
-     * @param {recoil.ui.WidgetHelper} helper
-     * @private
-     */
     private updateState_(helper:WidgetHelper) {
         if (helper.isGood()) {
 
@@ -350,3 +330,60 @@ export class MenuActionWidget extends Widget {
     }
 }
 
+
+/**
+ *
+ * @param {!recoil.ui.WidgetScope} scope
+ * @constructor
+ * @implements {recoil.ui.widgets.MenuItemWidget}
+ */
+export class SubMenuWidget extends Widget {
+    private state_: WidgetHelper;
+    private subMenu_: HTMLDivElement;
+    private actionB_?: Behaviour<any>;
+    private nameB_?: Behaviour<any>;
+    private actionBHandle_ = new Handle<Behaviour<any>>()
+    constructor(scope: WidgetScope) {
+        super(scope, createDom(TagName.DIV));
+        this.subMenu_ = createDom(TagName.DIV);
+        this.state_ = new WidgetHelper(scope, this.subMenu_, this, this.updateState_);
+        EventHelper.listen(this.subMenu_, EventType.CLICK, (e:MouseEvent) => {
+            if (this.actionB_) {
+                this.scope_.getFrp().accessTrans(()=> {
+                    this.actionB_!.set(e);
+                }, this.actionB_);
+            }
+        });
+
+    }
+    static options = StandardOptions('name', {
+        enabled: BoolWithExplanation.TRUE,
+    });
+
+    /**
+     *
+     * @param {recoil.frp.Behaviour<string>|string} name
+     * @param {recoil.frp.Behaviour<boolean>|boolean} enabledB
+     */
+    attachStruct (options: AttachType<{name:string, enabled:BoolWithExplanation}>) {
+        let bound = SubMenuWidget.options.bind(this.scope_.getFrp(), options);
+        this.nameB_ = bound.name();
+        this.state_.attach(this.nameB_, bound.enabled());
+    };
+
+    /**
+     *
+     * @param {recoil.ui.WidgetHelper} helper
+     * @private
+     */
+    updateState_(helper: WidgetHelper) {
+        removeChildren(this.subMenu_);
+        if (helper.isGood()) {
+            this.subMenu_.appendChild(createTextNode(this.nameB_!.get()));
+        } else {
+            this.subMenu_.appendChild(createTextNode("?"));
+        }
+
+        //this.subMenu_.setDispatchTransitionEvents(goog.ui.Component.State.ALL, true);
+    }
+}

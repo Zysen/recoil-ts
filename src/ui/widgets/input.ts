@@ -1,21 +1,32 @@
-import {WidgetScope} from "./widgetscope";
-import {createDom, setElementShown} from "../dom/dom";
-import {TagName} from "../dom/tags";
-import {Widget} from "./widget";
-import {WidgetHelper} from "../widgethelper";
-import {type AttachType} from "../../frp/struct";
-import {Behaviour, BStatus, ErrorType, Status} from "../../frp/frp";
-import {DefaultStringConverter, StringConverter} from "../../converters/stringconverter";
-import classlist from "../dom/classlist";
-import {EventHelper} from "../eventhelper";
-import {EventType} from "../dom/eventtype";
-import {Messages} from "../messages";
-import {isEqual} from "../../util/object";
-import {Message} from "../message";
-import {BoolWithExplanation} from "../booleanwithexplain";
-import {getGroup, StandardOptions} from "../frp/util";
+import {WidgetScope} from "./widgetscope.ts";
+import {createDom, setElementShown} from "../dom/dom.ts";
+import {TagName} from "../dom/tags.ts";
+import {Widget} from "./widget.ts";
+import {WidgetHelper} from "../widgethelper.ts";
+import {type AttachType} from "../../frp/struct.ts";
+import {Behaviour, BStatus, ErrorType, Status, TypedBehaviourList} from "../../frp/frp.ts";
+import {DefaultStringConverter, StringConverter} from "../../converters/stringconverter.ts";
+import classlist from "../dom/classlist.ts";
+import {EventHelper} from "../eventhelper.ts";
+import {EventType} from "../dom/eventtype.ts";
+import {Messages} from "../messages.ts";
+import {isEqual} from "../../util/object.ts";
+import {Message} from "../message.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import {getGroup, StandardOptions, StandardOptionsType} from "../frp/util.ts";
 import {EnabledTooltipHelper} from "../tooltiphelper.ts";
-import {KeyCodes} from "../dom/keycodes.ts";
+
+type BoundConfigType<InType> = {
+    placeHolder: String | Message;
+    immediate: boolean;
+    maxLength: number | undefined;
+    converter: StringConverter<InType>;
+    editable: boolean;
+    charValidator: (ch:string) => boolean;
+    displayLength: number;
+    spellcheck: boolean;
+    classes:string[];
+};
 
 export class InputWidget<InType = string> extends Widget {
 
@@ -37,18 +48,8 @@ export class InputWidget<InType = string> extends Widget {
     private lastValue_?: Status<InType,any, any>;
     private lastConverter_?: StringConverter<InType>;
 
-    private configB_?: Behaviour<{
-        placeHolder: String | Message;
-        immediate: boolean;
-        maxLength: number | undefined;
-        converter: StringConverter<InType>;
-        editable: boolean;
-        charValidator: (ch:string) => boolean;
-        displayLength: number;
-        spellcheck: boolean;
-        classes:string[];
-    }>;
 
+    private configB_?: Behaviour<BoundConfigType<InType>>;
     private enabledB_?: Behaviour<BoolWithExplanation>;
     private tooltipB_?: Behaviour<Message | string>;
     private outErrorsB_?: Behaviour<ErrorType[]>;
@@ -57,6 +58,9 @@ export class InputWidget<InType = string> extends Widget {
         super(scope, createDom(TagName.DIV));
         this.input_ = createDom(TagName.INPUT);
         this.readonly_ = createDom(TagName.SPAN);
+
+        this.getElement().appendChild(this.input_);
+        this.getElement().appendChild(this.readonly_);
 
         this.helper_ = new WidgetHelper(scope, this.element_, this, this.updateState_, {detach: this.detach_, attach: () => {}});
         this.tootipHelper_ = new EnabledTooltipHelper(scope, this.element_, this.element_);
@@ -97,7 +101,7 @@ export class InputWidget<InType = string> extends Widget {
         displayLength?: number,
         spellcheck?: boolean,
         charValidator?: (c: string) => boolean,
-    }>) {
+     } & StandardOptionsType>) {
         let frp = this.scope_.getFrp();
 
         let bound = InputWidget.options.bind(frp, data);
@@ -110,8 +114,8 @@ export class InputWidget<InType = string> extends Widget {
         this.outErrorsB_ = bound.outErrors();
         this.helper_.attach(this.valueB_, this.enabledB_, this.outErrorsB_, this.configB_);
 
-        this.changeHelper_.listen(this.scope_.getFrp().createCallback((v: KeyboardEvent) => {
-            //let inputEl = v.target a;
+        this.changeHelper_.listen(this.scope_.getFrp().createCallback(() => {
+            //let inputEl = v.target;
             this.updateElement_(this.input_, !!this.configB_?.get().immediate, !!this.configB_?.get().immediate);
         }, this.valueB_ as Behaviour<InType>, this.configB_));
 
@@ -219,19 +223,21 @@ export class InputWidget<InType = string> extends Widget {
             }
         , this.valueB_ as Behaviour<any>, this.configB_));
 
-        let tooltipB = frp.liftB<BoolWithExplanation>(function (enabled, length, tooltip) {
+        let tooltipB = frp.liftB<BoolWithExplanation,
+            TypedBehaviourList<[BoolWithExplanation,BoundConfigType<InType>, Message|string]>>(
+            (enabled:BoolWithExplanation, _config:BoundConfigType<InType>, tooltip:Message|string):BoolWithExplanation => {
             if (!enabled.val()) {
                 return enabled;
             }
+            let config = this.configB_!.get();
             if (tooltip !== Messages.BLANK) {
                 if (tooltip === null) {
                     return BoolWithExplanation.TRUE;
                 }
-                return new BoolWithExplanation(true, tooltip);
+                return new BoolWithExplanation(true, Message.toMessage(tooltip));
             }
-            if (length !== undefined) {
-
-                return new BoolWithExplanation(true, Messages.MAX_LENGTH_0.resolve({len: length}));
+            if (config.maxLength !== undefined) {
+                return new BoolWithExplanation(true, Messages.MAX_LENGTH_0.resolve({len: config.maxLength}));
             }
             return BoolWithExplanation.TRUE;
         }, this.enabledB_, this.configB_, this.tooltipB_);
@@ -264,7 +270,6 @@ export class InputWidget<InType = string> extends Widget {
         if (!this.configB_?.metaGet().good()) {
             return;
         }
-
         let res = this.configB_?.get().converter.unconvert(inputEl.value);
 
         if (res.supported === false) {
@@ -311,7 +316,6 @@ export class InputWidget<InType = string> extends Widget {
         let frp = this.scope_.getFrp();
         delete this.lastValue_;
         delete this.lastConverter_;
-        let v = this.configB_
         frp.accessTrans(() => {
             if (this.configB_?.good() && this.valueB_?.good() && !this.configB_.get().immediate) {
 
@@ -377,11 +381,11 @@ export class InputWidget<InType = string> extends Widget {
 
     private updateState_(helper: WidgetHelper) {
         this.input_.disabled = !(helper.isGood() && this.enabledB_?.get().val());
-        this.input_.placeholder = this.configB_?.metaGet().good() && this.configB_.get().placeHolder.toString() || '';
+        this.input_.placeholder = this.configB_?.metaGet().good() && this.configB_.get().placeHolder?.toString() || '';
         let editable = !!(this.configB_?.metaGet().good() && this.configB_.get().editable);
 
         setElementShown(this.readonly_, !editable);
-        setElementShown(this.readonly_, editable);
+        setElementShown(this.input_, editable);
 
 
 
@@ -457,6 +461,9 @@ export class InputWidget<InType = string> extends Widget {
         return this.configB_?.metaGet();
     }
 
+    getInput():HTMLInputElement {
+        return this.input_;
+    }
 
     /**
      *

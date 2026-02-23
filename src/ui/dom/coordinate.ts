@@ -1,4 +1,4 @@
-import {toRadians} from "../../util/goog";
+import {toRadians} from "../../util/goog.ts";
 
 export class Coordinate {
     public x:number;

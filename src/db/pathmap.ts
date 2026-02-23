@@ -1,6 +1,7 @@
-import {Path, PathItem, Schema} from "./path";
+import {Path, PathItem} from "./path";
 import {AvlTree} from "../structs/avltree";
 import {compareKey} from "../util/object";
+import {Schema} from "./schema.ts";
 
 /**
  * a map that given a path finds all items subitems

@@ -1,27 +1,28 @@
-import {Behaviour} from "../frp/frp";
-import { WidgetHelper } from "./widgethelper";
-import {WidgetScope} from "./widgets/widgetscope";
-import * as classlist  from "./dom/classlist";
-import {append, createDom, setProperties} from "./dom/dom";
-import {TagName} from "./dom/tags";
-import {EventType} from "./dom/eventType";
-import {EventHelper, Unlistener} from "./eventhelper";
-import {Message} from "./message";
-import {DomObserver} from "./domobserver";
-import {Tooltip} from "./tooltip";
+import {Behaviour} from "../frp/frp.ts";
+import {WidgetHelper} from "./widgethelper.ts";
+import {WidgetScope} from "./widgets/widgetscope.ts";
+import * as classlist from "./dom/classlist.ts";
+import {append, createDom, setProperties} from "./dom/dom.ts";
+import {TagName} from "./dom/tags.ts";
+import {EventType} from "./dom/eventtype.ts";
+import {EventHelper, Unlistener} from "./eventhelper.ts";
+import {Message} from "./message.ts";
+import {Tooltip} from "./tooltip.ts";
+import {BehaviourOrType} from "../frp/struct.ts";
+
 /**
  * @constructor
  * @param {!recoil.ui.WidgetScope} scope gui scope
  */
-class Html {
+export class Html {
     private scope_: WidgetScope;
 
     constructor(scope: WidgetScope) {
         this.scope_ = scope;
     }
 
-    classes(element: Element, classesB: Behaviour<string[]>):WidgetHelper {
-        let helper = new WidgetHelper(this.scope_, element, null, ()=> {
+    classes(element: Element, classesB: Behaviour<string[]>): WidgetHelper {
+        let helper = new WidgetHelper(this.scope_, element, null, () => {
             if (classesB.good()) {
                 classlist.setAll(element, classesB.get());
             }
@@ -30,7 +31,7 @@ class Html {
         return helper;
     }
 
-    enableClass(element: HTMLElement, cls: string, enabledB: Behaviour<boolean>):WidgetHelper {
+    enableClass(element: HTMLElement, cls: string, enabledB: Behaviour<boolean>): WidgetHelper {
         let helper = new WidgetHelper(this.scope_, element, null, function () {
             classlist.enable(element, cls, enabledB.good() && enabledB.get());
         });
@@ -45,15 +46,13 @@ class Html {
      *     its elements will be added as childNodes instead.
      * @return {!Element}
      */
-    createClassDiv(classesB:Behaviour<string[]>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
-    {
+    createClassDiv(classesB: Behaviour<string[]>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
         let div = createDom('div', opt_attributes, ...var_args);
         this.classes(div, classesB);
         return div;
     }
 
-    appendDiv(parent:Node, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]) :Element
-    {
+    appendDiv(parent: Node, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
         let res = createDom(TagName.DIV, opt_attributes, ...var_args);
         append(parent, res);
         return res;
@@ -68,8 +67,7 @@ class Html {
      *     its elements will be added as childNodes instead.
      * @return {!Element}
      */
-    appendClassDiv(parent:Node, classesB:Behaviour<string[]>,opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
-    {
+    appendClassDiv(parent: Node, classesB: Behaviour<string[]>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
         let el = this.createClassDiv(classesB, opt_attributes, ...var_args);
         append(el, arguments);
         return el;
@@ -78,9 +76,8 @@ class Html {
     /**
      * WARNING do not use on any data that can be supplied by the user
      */
-    innerHtml(element:Element, innerHtmlB:Behaviour<string>):WidgetHelper
-    {
-        let l:Unlistener|null = null;
+    innerHtml(element: Element, innerHtmlB: Behaviour<string>): WidgetHelper {
+        let l: Unlistener | null = null;
 
         let helper = new WidgetHelper(this.scope_, element, null, function () {
             if (l) {
@@ -91,7 +88,7 @@ class Html {
                 element.innerHTML = innerHtmlB.get();
             } else if (innerHtmlB.metaGet().errors().length > 0) {
                 let errors = innerHtmlB.metaGet().errors();
-                l = EventHelper.listen(element,EventType.CLICK, function () {
+                l = EventHelper.listen(element, EventType.CLICK, function () {
                     for (let i = 0; i < errors.length; i++) {
                         console.error(errors[i]);
                     }
@@ -108,8 +105,7 @@ class Html {
      * @param {!recoil.frp.Behaviour<string>} innerTextB
      * @return {!WidgetHelper}
      */
-    innerText(element:HTMLElement, innerTextB:Behaviour<string>):WidgetHelper
-    {
+    innerText(element: HTMLElement, innerTextB: Behaviour<string>): WidgetHelper {
         let helper = new WidgetHelper(this.scope_, element, null, function () {
             if (innerTextB.good()) {
                 element.innerText = innerTextB.get();
@@ -121,15 +117,13 @@ class Html {
         return helper;
     }
 
-    createInnerHtmlDiv(innerHtmlB:Behaviour<string>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
-    {
+    createInnerHtmlDiv(innerHtmlB: Behaviour<string>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
         let div = createDom(TagName.DIV, opt_attributes, ...var_args);
         this.innerHtml(div, innerHtmlB);
         return div;
     }
 
-    createInnerHtmlDom(type: TagName, innerHtmlB:Behaviour<string>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
-    {
+    createInnerHtmlDom(type: TagName, innerHtmlB: Behaviour<string>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
         let div = createDom(type, opt_attributes, ...var_args);
         this.innerHtml(div, innerHtmlB);
         return div;
@@ -145,13 +139,11 @@ class Html {
      *     its elements will be added as childNodes instead.
      * @return {!Element}
      */
-    appendInnerHtmlDiv(parent:Node, innerHtmlB:Behaviour<string>,opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
-    {
+    appendInnerHtmlDiv(parent: Node, innerHtmlB: Behaviour<string>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
         let res = this.createInnerHtmlDiv(innerHtmlB, opt_attributes, ...var_args);
         append(parent, res);
         return res;
     }
-
 
 
     /**
@@ -160,37 +152,30 @@ class Html {
      * @param {!recoil.frp.Behaviour<boolean>} showB
      * @return {!WidgetHelper}
      */
-    show(element:HTMLElement, showB:Behaviour<boolean>): WidgetHelper
-    {
-        let orig:string|undefined = element.style.display;
+    show(element: HTMLElement, showB: Behaviour<boolean>): WidgetHelper {
+        let orig: string | undefined = element.style.display;
         orig = orig === 'none' ? undefined : orig;
         let helper = new WidgetHelper(this.scope_, element, null, function () {
             let show = showB.good() && showB.get();
-            element.style.display = show ? orig  as string: 'none';
+            element.style.display = show ? orig as string : 'none';
         });
         helper.attach(showB);
 
         return helper;
     }
-    /**
-     * sets the display to none/undefined depending on {@code showB}
-     * @param {!Array<!Element>} elements
-     * @param {!recoil.frp.Behaviour<boolean>} showB
-     * @return {!WidgetHelper}
-     */
-    showElements(elements:Element[], showB: Behaviour<boolean>)
-    {
 
-        let origs:(string|undefined)[] = elements.map((element: Element): string => {
+    showElements(elements: Element[], showB: Behaviour<boolean>) {
+
+        let origs: (string | undefined)[] = elements.map((element: Element): string => {
             return (element as HTMLElement).style.display;
         });
-        origs = origs.map((orig: string|undefined)=> {
+        origs = origs.map((orig: string | undefined) => {
             return orig === 'none' ? undefined : orig;
         });
         let helper = new WidgetHelper(this.scope_, elements[0], null, function () {
             var show = showB.good() && showB.get();
             elements.forEach(function (element, idx) {
-                (element as HTMLElement).style.display = show ? (origs[idx] ||'') : 'none';
+                (element as HTMLElement).style.display = show ? (origs[idx] || '') : 'none';
             });
         });
         if (elements.length > 0) {
@@ -204,8 +189,7 @@ class Html {
      * sets the disabled field, I have called it enabled because I don't like
      * negative logic in code
      */
-    enabled(element:HTMLButtonElement|HTMLFieldSetElement|HTMLInputElement|HTMLOptionElement|HTMLOptGroupElement|HTMLTextAreaElement, enabledB:Behaviour<boolean>):WidgetHelper
-    {
+    enabled(element: HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLOptionElement | HTMLOptGroupElement | HTMLTextAreaElement, enabledB: Behaviour<boolean>): WidgetHelper {
         let helper = new WidgetHelper(this.scope_, element, null, function () {
             let disabled = !(enabledB.good() && enabledB.get());
             element.disabled = disabled;
@@ -214,71 +198,59 @@ class Html {
         return helper;
     }
 
-    createShowDiv(showB:Behaviour<boolean>,opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
-    {
-        var div = this.createDom_(1, 'div', arguments);
+    createShowDiv(showB: Behaviour<boolean>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
+        let div = createDom('div', opt_attributes, ...var_args);
         this.show(div, showB);
         return div;
     }
 
 
-    appendShowDiv(parent, showB,  opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null| NodeList)[]):Element
 
+    appendShowDiv(parent:Element, showB:Behaviour<boolean>, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList)[]): Element {
 
-{
-        return this.append_(this.createShowDiv, arguments);
-    }
-    onClick(element, callbackB)
-    {
-        this.onEvent(element, goog.events.EventType.CLICK, callbackB);
+        let el = this.createShowDiv(showB, opt_attributes,...var_args);
+        append(parent,el);
+        return el;
     }
 
-
-    /**
-     * @param {!Element} element
-     * @param {!recoil.frp.Behaviour<?>} callbackB
-     */
-    onDragStart(element, callbackB)
-    {
+    onClick(element:Element, callbackB:Behaviour<any>) {
+        this.onEvent(element, EventType.CLICK, callbackB);
+    }
+    onDragStart(element:Element, callbackB:Behaviour<any>) {
         this.onEvent(element, EventType.DRAGSTART, callbackB);
     }
 
-    onDrag(element:Element, callbackB)
-    {
+    onDrag(element: Element, callbackB:Behaviour<any>) {
         this.onEvent(element, EventType.DRAG, callbackB);
     }
-    onDragEnd(element:Element, callbackB)
-    {
+
+    onDragEnd(element: Element, callbackB:Behaviour<any>) {
         this.onEvent(element, EventType.DRAGEND, callbackB);
     }
 
 
-    onDragEnter(element:Element, callbackB)
-    {
+    onDragEnter(element: Element, callbackB:Behaviour<any>) {
         this.onEvent(element, EventType.DRAGENTER, callbackB);
     }
-    onDragOver(element:Element, callbackB:Behaviour<any>)
-    {
+
+    onDragOver(element: Element, callbackB: Behaviour<any>) {
         this.onEvent(element, EventType.DRAGOVER, callbackB);
     }
 
-    onDragLeave(element:Element, callbackB:Behaviour<any>)
-    {
+    onDragLeave(element: Element, callbackB: Behaviour<any>) {
         this.onEvent(element, EventType.DRAGLEAVE, callbackB);
     }
 
-    onDrop(element:Element, callbackB:Behaviour<any>)
-    {
+    onDrop(element: Element, callbackB: Behaviour<any>) {
         this.onEvent(element, EventType.DROP, callbackB);
     }
 
-    onEvent(element:Element, event:EventType, callbackB:Behaviour<any>)
-    {
+    onEvent(element: Element, event: EventType, callbackB: Behaviour<any>) {
         let helper = new WidgetHelper(this.scope_, element, this, function (helper) {
 
         });
         var frp = this.scope_.getFrp();
-        element.addEventListener(event, (e:Event) => {
+        element.addEventListener(event, (e: Event) => {
             // e.stopPropagation();
             // e.preventDefault();
             frp.accessTrans(() => {
@@ -291,51 +263,29 @@ class Html {
 
     }
 
-
-    /**
-     * @param {!Element} element
-     * @param {string|!recoil.ui.message.Message} tooltip
-     */
-    static tooltip(element, tooltip:string|Message) {
-        let component = null;
-        DomObserver.instance.listen(element, (b:boolean)=> {
-            if (b) {
-                if (!component) {
-                    component = new Tooltip(element, tooltip.toString());
+    tooltip(element: Element, tooltip: BehaviourOrType<Message | string>) {
+        var tooltipEl: null | Tooltip = null;
+        let tooltipB = this.scope_.getFrp().toBehaviour(tooltip);
+        let helper = new WidgetHelper(this.scope_, element, this,
+            () => {
+                if (tooltipEl) {
+                    tooltipEl.dispose();
                 }
-            } else {
-                if (component) {
-                    component.dispose();
-                    component = null;
+                tooltipEl = null;
+                if (tooltipB.good() && tooltipB.get()) {
+                    tooltipEl = new Tooltip(element, tooltip.toString());
+                }
+
+            }, {
+                attach: () => null,
+                detach: () => {
+                    if (tooltipEl) {
+                        tooltipEl.dispose();
+                    }
+                    tooltipEl = null;
                 }
             }
-        });
-    }
-
-    /**
-     * @param {!Element} element
-     * @param {!recoil.frp.Behaviour<recoil.ui.message.Message>|recoil.ui.message.Message} tooltip
-     */
-    tooltip(element, tooltip)
-    {
-        var tooltipEl = null;
-        var tooltipB = new recoil.frp.Util(this.scope_.getFrp()).toBehaviour(tooltip);
-        var helper = new WidgetHelper(this.scope_, element, this, function (helper) {
-
-            if (tooltipEl) {
-                tooltipEl.dispose();
-            }
-            tooltipEl = null;
-            if (tooltipB.good() && tooltipB.get()) {
-                tooltipEl = new goog.ui.Tooltip(element, tooltip.toString());
-            }
-
-        }, function () {
-            if (tooltipEl) {
-                tooltipEl.dispose();
-            }
-            tooltipEl = null;
-        });
+        );
         helper.attach(tooltipB);
     }
 }

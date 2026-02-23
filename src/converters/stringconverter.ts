@@ -1,6 +1,5 @@
-import { Message } from "../ui/message";
-import {TypeConverter, UnconvertType} from "./typeconverter";
-import {Messages} from "../ui/messages";
+import {TypeConverter, UnconvertType} from "./typeconverter.ts";
+import {Messages} from "../ui/messages.ts";
 
 export interface StringConverter<T> extends TypeConverter<T, string> {
 

@@ -18,8 +18,8 @@
  * @author robbyw@google.com (Robert Walker)
  * @author eae@google.com (Emil A Eklund)
  */
-import {ClientPosition} from "./clientposition";
-import {Coordinate} from "../dom/coordinate";
+import {ClientPosition} from "./clientposition.ts";
+import {Coordinate} from "../dom/coordinate.ts";
 import {
     Corner,
     flipCornerHorizontal,
@@ -27,10 +27,10 @@ import {
     Overflow,
     OverflowStatus,
     positionAtCoordinate
-} from "./positioning";
-import {Size} from "../dom/size";
-import {getClientViewportElement, getDomHelper, getVisibleRectForElement} from "../dom/dom";
-import {Box} from "../dom/box";
+} from "./positioning.ts";
+import {Size} from "../dom/size.ts";
+import {getClientViewportElement, getDomHelper, getVisibleRectForElement} from "../dom/dom.ts";
+import {Box} from "../dom/box.ts";
 
 /**
  * Encapsulates a popup position where the popup is positioned relative to the

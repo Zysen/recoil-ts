@@ -6,6 +6,8 @@ import {compareKey} from "../../util/object";
 import {Behaviour} from "../../frp/frp";
 import {BehaviourOrType} from "../../frp/struct";
 
+type ColFilterType<T> = (v:T) => boolean;
+
 export class Filter implements  Inversable<Table, {table:Table, filter:(row:TableRow)=>boolean}>{
     private srcCol_ = new ColumnKey<any[]|null>('$src', undefined, undefined,  null);
     calculate(params: { table: Table; filter: (row: TableRow) => boolean; }): Table {
@@ -45,14 +47,15 @@ export class Filter implements  Inversable<Table, {table:Table, filter:(row:Tabl
     static createRowFilterB(tableB:Behaviour<Table>, filter:BehaviourOrType<(row:TableRow)=> boolean>) {
         return create(tableB.frp(), new Filter(), {table: tableB, filter: filter});
     }
-    createColFilterB<T>(tableB:Behaviour<Table>, column:BehaviourOrType<T>, filter:BehaviourOrType<(v:T) => boolean>) {
+    createColFilterB<T>(tableB:Behaviour<Table>, column:BehaviourOrType<ColumnKey<T>>, filter:BehaviourOrType<(v:T) => boolean>) {
         let frp = tableB.frp();
-        let filterB = frp.liftB<(row:TableRow) => boolean>(
-            (filter, col) =>{
-                return (row:TableRow) => {
-                    return filter(row.get(col));
-                }
-            },
+        let calc = (filter: ColFilterType<T>, col:ColumnKey<T>) => {
+            return (row:TableRow):boolean => {
+                return filter(row.get(col)!);
+            }
+        }
+        let filterB = frp.liftB(
+            calc,
             frp.toBehaviour(filter), frp.toBehaviour(column));
         return Filter.createRowFilterB(tableB, filterB);
     }

@@ -1,110 +1,109 @@
-/**
- *
- * @param {!recoil.ui.WidgetScope} scope
- * @constructor
- */
-recoil.ui.widgets.MenuStructure = function(scope) {
-      this.scope_ = scope;
-      this.menuArr_ = [];
-};
+import {WidgetScope} from "./widgetscope.ts";
+import {MenuActionWidget, MenuButtonWidget, MenuItemWidget, SubMenuWidget} from "./menu.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import {ScreenAction} from "../actions/screenAction.ts";
+import {Widget} from "./widget.ts";
 
-/**
- *
- * @param {Array<string>} menus
- * @param {recoil.ui.actions.ScreenAction} screenAction
- * @param {function () : !recoil.ui.Widget} opt_create
- */
-recoil.ui.widgets.MenuStructure.prototype.add = function(menus, screenAction, opt_create) {
+export interface MenuInfo {
+    name:string, children: MenuInfo[],
+    create?: (scope: WidgetScope) => Widget;
+    action?: ScreenAction<any>|null
+}
+export class MenuStructure {
+    private readonly scope_: WidgetScope;
+    private readonly menuArr_: MenuInfo[];
 
-      var curMenus = this.menuArr_;
-      for (var i = 0; i < menus.length; i++) {
-            var idx = goog.array.findIndex(curMenus, function(el) {return el.name === menus[i];});
+    constructor(scope: WidgetScope) {
+        this.scope_ = scope;
+        this.menuArr_ = [];
+    }
+
+    add(menus:string[], screenAction:ScreenAction<any>|null, opt_create?: () => Widget) {
+
+        let curMenus = this.menuArr_;
+        for (let i = 0; i < menus.length; i++) {
+            let idx = curMenus.findIndex((el)=> {
+                return el.name === menus[i];
+            });
 
 
-            var menuStruct;
+            let menuStruct : MenuInfo;
             if (idx === -1) {
-                  menuStruct = {
-                        name: menus[i],
-                        children: []
-                  };
-                  if (opt_create) {
-                        menuStruct.create = opt_create;
-                  }
-                  curMenus.push(menuStruct);
-            }
-            else {
-                  menuStruct = curMenus[idx];
+                menuStruct = {
+                    name: menus[i],
+                    children: []
+                };
+                if (opt_create) {
+                    menuStruct.create = opt_create;
+                }
+                curMenus.push(menuStruct);
+            } else {
+                menuStruct = curMenus[idx];
             }
             if (i + 1 === menus.length) {
-                  menuStruct.action = screenAction;
+                menuStruct.action = screenAction;
 
             }
             curMenus = menuStruct.children;
-      }
-};
+        }
+    };
 
-/**
- * @param {!Array<string>} menus
- */
-recoil.ui.widgets.MenuStructure.prototype.addSeparator = function(menus) {
-      var menus1 = goog.array.clone(menus);
-      menus1.push('');
-      this.add(menus1, null, function() {
-         return new recoil.ui.widgets.MenuSeparatorWidget();
-      });
-};
-/**
- *
- * @param {recoil.ui.widgets.MenuButtonWidget} menu
- * @param {Object} item
- * @return {recoil.ui.widgets.MenuItemWidget}
- * @private
- */
-recoil.ui.widgets.MenuStructure.prototype.create_ = function(menu, item) {
-      if (item.children.length === 0) {
+    /**
+     * @param {!Array<string>} menus
+     */
+    addSeparator(menus: string[]) {
+        let menus1 = [...menus];
+        menus1.push('');
+        this.add(menus1, null, function () {
+            return new MenuSeparatorWidget();
+        });
+    }
+
+    private create_(menu: MenuButtonWidget<any>, item:MenuInfo): MenuItemWidget {
+        if (item.children.length === 0) {
             if (item.create) {
-                  return item.create();
+                return item.create(this.scope_);
             }
-                  var menuItem = new recoil.ui.widgets.MenuItemActionWidget(this.scope_);
-                  menuItem.attach(item.name, true, item.action.createCallback(this.scope_));
+            let menuItem = new MenuActionWidget(this.scope_);
+            menuItem.attachStruct({name: item.name, enabled: true, action: item.action!.createCallback(this.scope_)});
 
             return menuItem;
-      } else {
+        } else {
             // submenu
-            var subMenu = new recoil.ui.widgets.SubMenuWidget(this.scope_);
+            let subMenu = new SubMenuWidget(this.scope_);
 
-            var me = this;
-            var subitems = [];
-            item.children.forEach(function(it) {
-                  var menuItem = me.create_(menu, it);
-                  subMenu.getComponent().addItem(menuItem.getComponent());
-                  subitems.push(me.create_(menu, it));
-            });
-            subMenu.attach(item.name, true);
+            let me = this;
+            let subitems = [];
+            for (let it of item.children) {
+                let menuItem = this.create_(menu, it);
+                menuItem.getElement().appendChild(subMenu.getElement());
+                subitems.push(me.create_(menu, it));
+            }
+            subMenu.attachStruct({name: item.name, enabled: BoolWithExplanation.TRUE});
 
             return subMenu;
-      }
-};
+        }
+    }
 
-/**
- *
- * @return {recoil.frp.Behaviour<Array<recoil.ui.widgets.MenuButtonWidget>> | Array<recoil.ui.widgets.MenuButtonWidget>}
- */
-recoil.ui.widgets.MenuStructure.prototype.create = function() {
-      var menuArr = [];
+    create():MenuButtonWidget<any>[] {
+        let menuArr = [];
 
-      var me = this;
-      for (var i = 0; i < this.menuArr_.length; i++) {
-          if (this.menuArr_.hasOwnProperty(i)) {
-              var menu = new recoil.ui.widgets.MenuButtonWidget(this.scope_);
-              var items = [];
+        let me = this;
+        for (let i = 0; i < this.menuArr_.length; i++) {
+            if (this.menuArr_.hasOwnProperty(i)) {
+                let children = this.menuArr_[i].children;
 
-              goog.array.forEach(this.menuArr_[i].children, function(item) {
-                  items.push(me.create_(menu, item));
-              });
-              menu.attach(this.menuArr_[i].name, items);
-              menuArr.push(menu);
-          }
-      }
-      return menuArr;
-};
+                let menu = new MenuButtonWidget<string>(this.scope_);
+                let items = [];
+
+                for (let item of this.menuArr_[i].children) {
+                    items.push(me.create_(menu, item));
+                }
+
+                menu.attachStruct({name: this.menuArr_[i].name, items: items});
+                menuArr.push(menu);
+            }
+        }
+        return menuArr;
+    }
+}

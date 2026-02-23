@@ -179,7 +179,7 @@ export class BoolWithExplanation {
 
     static toString(valB:Behaviour<BoolWithExplanation>) {
         return valB.frp().liftB((b) => {
-            return b.reason() ? b.reason().toString() : '';
+            return b.reason() ? b.reason()!.toString() : '';
         }, valB);
     };
 

@@ -13,13 +13,13 @@
 // limitations under the License.
 
 
-import {contains, getFrameContentDocument, getOwnerDocument, setElementShown} from "./dom/dom";
-import type {Transition} from "./fx/transition";
-import {TagName} from "./dom/tags";
-import {userAgent} from "./dom/useragent";
-import {EventType as DomEventType} from "./dom/eventtype";
-import {EventType as TransEventType} from "./fx/transition";
-import {EventHandler,} from "./eventhelper";
+import {contains, getFrameContentDocument, getOwnerDocument, setElementShown} from "./dom/dom.ts";
+import type {Transition} from "./fx/transition.ts";
+import {TagName} from "./dom/tags.ts";
+import {userAgent} from "./dom/useragent.ts";
+import {EventType as DomEventType} from "./dom/eventtype.ts";
+import {EventType as TransEventType} from "./fx/transition.ts";
+import {EventHandler,} from "./eventhelper.ts";
 
 export enum Type {
     TOGGLE_DISPLAY = 'toggle_display',

@@ -1,13 +1,17 @@
-import {FLATTEN, NO_FLATTEN} from "../../frp/struct";
-import {WidgetScope} from "./widgetscope";
-import {Behaviour} from "../../frp/frp";
-import {TableCell} from "../../structs/table/table";
+import {FLATTEN, NO_FLATTEN} from "../../frp/struct.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {Behaviour} from "../../frp/frp.ts";
+import {TableCell} from "../../structs/table/table.ts";
 
-export abstract class Widget<T extends Element = Element> {
+export interface WidgetInterface<Type extends Element = Element> {
+    getElement(): Type;
+}
+
+export abstract class Widget<T extends Element = Element> implements WidgetInterface<T>{
     readonly [FLATTEN] =  NO_FLATTEN;
     protected readonly  scope_: WidgetScope;
     protected readonly  element_: T;
-    constructor(scope: WidgetScope, element:T) {
+    protected constructor(scope: WidgetScope, element:T) {
         this.scope_ = scope;
         this.element_ = element;
     }
@@ -20,7 +24,7 @@ export abstract class Widget<T extends Element = Element> {
 }
 
 export abstract class CellWidget<T> extends Widget {
-    constructor(scope: WidgetScope, opt_element:Element) {
+    protected constructor(scope: WidgetScope, opt_element:Element) {
         super(scope, opt_element);
     }
     abstract attachCell(cellB:Behaviour<TableCell<T>>):undefined;

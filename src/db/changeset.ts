@@ -1,19 +1,19 @@
-import {
-    Path,
-    PathItem,
-    Schema,
-    ValueSerializor
-} from "./path";
-import {AvlTree} from "../structs/avltree";
-import {clone, compare, compareKey, isEqual} from "../util/object";
-import {StructType} from "../frp/struct";
-import {ChangeMapNodeChild, PathChangeMap} from "./changepathmap";
-import {Add, Change, ChangePosition, ChangeType, Delete, Move, Reorder, SetChange} from "./change";
-import {ChangeDbInterface, ReferenceFilter} from "./changedb";
+import {Path, PathItem, type ValueSerializor} from "./path.ts";
+import {AvlTree} from "../structs/avltree.ts";
+import {compare, compareKey, isEqual} from "../util/object.ts";
+import {type StructType} from "../frp/struct.ts";
+import {type ChangeMapNodeChild, PathChangeMap} from "./changepathmap.ts";
+import {Add, type Change, ChangePosition, Delete, Move, Reorder, SetChange} from "./change.ts";
+import {type ChangeDbInterface, FilterGetter, type Listener, type ReferenceFilter, trueFilter} from "./changedb.ts";
+import {type Schema} from "./schema.ts";
+import {Serializable} from "../util/serializable.ts";
 
 
 export type Primitive = string | number | boolean | bigint | symbol | null | undefined;
-
+export type PathListenerType = {path: Path, listener: Listener};
+enum NullState {
+    isNull, isUndefined, isDefined
+}
 /**
  * @constructor
  */
@@ -21,7 +21,7 @@ export class ChangeSet {
     /**
      * remove a path from the list
      */
-    static removePath(path:Path, list:Path[]) {
+    static removePath(path: Path, list: Path[]) {
         for (let i = 0; i < list.length; i++) {
             if (isEqual(list[i], path)) {
                 list.splice(i, 1);
@@ -30,7 +30,7 @@ export class ChangeSet {
         }
     }
 
-    static findPath(path:Path, list:Path[]):Path|null {
+    static findPath(path: Path, list: Path[]): Path | null {
         for (let i = 0; i < list.length; i++) {
             if (isEqual(list[i], path)) {
                 return list[i];
@@ -42,7 +42,7 @@ export class ChangeSet {
     /**
      * takes a list of changes and converts it into a set of minimal changes
      */
-    static merge(schema:Schema, changes:Change[]):Change[] {
+    static merge(schema: Schema, changes: Change[]): Change[] {
         let pathChangeMap = new PathChangeMap();
 
         for (let i = 0; i < changes.length; i++) {
@@ -61,8 +61,8 @@ export class ChangeSet {
             // if was added move all actions us and change path to dest
             // do not add
         }
-        let toSort:ChangeMapNodeChild[] = [];
-        pathChangeMap.forEach(function(change:ChangeMapNodeChild) {
+        let toSort: ChangeMapNodeChild[] = [];
+        pathChangeMap.forEach(function (change: ChangeMapNodeChild) {
             if (!change.ancestor && !change.hide) {
                 change.change.sortDesendents(pathChangeMap);
                 toSort.push(change);
@@ -74,13 +74,13 @@ export class ChangeSet {
     /**
      * @return {!AvlTree<!Path>} set of changed roots
      */
-    static applyChanges(dbInterface: ChangeDbInterface, schema: Schema, changes: Change[]):AvlTree<Path> {
+    static applyChanges(dbInterface: ChangeDbInterface, schema: Schema, changes: Change[]): AvlTree<Path> {
         let changedRoots = new AvlTree<Path>(compare);
 
-        const addRoot = (root:Path)=> {
+        const addRoot = (root: Path) => {
             changedRoots.add(root);
         };
-        const addRoots =  (path:Path)=> {
+        const addRoots = (path: Path) => {
             dbInterface.getRoots(path).forEach(addRoot);
         };
         for (let i = 0; i < changes.length; i++) {
@@ -106,367 +106,29 @@ export class ChangeSet {
         return changedRoots;
     }
 }
-export class ChangeDb implements ChangeDbInterface {
-    private schema_: Schema;
-    private rootLock_: number;
-    private data_:ContainerNode;
-    private roots_:Path[];
-
-    constructor(schema: Schema) {
-        this.schema_ = schema;
-        this.data_ = new ContainerNode();
-        this.rootLock_ = 0;
-        this.roots_ = [];
-    }
-
-    /**
-     * these are used to remove data from the database when there are no longer references to the data. The data should be deleted
-     * this may replace set root so that we need the root c
-     * @param path
-     * @param filter
-     */
-    addReference(path:Path, filter:ReferenceFilter) {
-    }
-    removeReference(path: Path, filter: ReferenceFilter) {
-    }
-
-    updatePk(schema: Schema, path:Path, keys:any[]) {
-        let node = this.resolve_(path.unsetKeys(), false);
-        if (node) {
-            node.updatePk(schema, path, keys);
-        }
-
-    }
-
-    /**
-     * @param {!Path} path
-     */
-    applyAdd(path: Path) {
-        let listNode;
-        if (path.lastKeys().length > 0) {
-            // this is a list node we are adding
-            listNode = this.resolve_(path.unsetKeys(), this.rootLock_ === 0);
-            if (!listNode) {
-                return;
-            }
-            if (!(listNode instanceof ListNode)) {
-                throw new Error("cannot add node '" + path.toString() + "' to non-list");
-            }
-
-            let newNode = new ContainerNode();
-            listNode.add(path.last(), newNode);
-        } else {
-            listNode = this.resolve_(path.parent(), false);
-
-            if (!(listNode instanceof ContainerNode)) {
-                // a root container maybe added because it maybe an object and null
-                if (listNode !== null) {
-                    throw new Error("cannot add node '" + path.toString() + "' to non-container");
-                }
-            }
-            listNode = this.resolve_(path, true);
-            if (listNode instanceof ContainerNode) {
-                if (!listNode.get(this.schema_, path)) {
-                    listNode.set(this.schema_, path, {});
-                }
-            }
-        }
-        this.schema_.applyDefaults(path, this);
-    }
-
-
-    /**
-     * @param {!Path} path
-     */
-    applyDelete(path:Path) {
-        let listNode;
-        if (path.lastKeys().length > 0) {
-            // this is a list node we are deleting from
-            listNode = this.resolve_(path.unsetKeys(), false);
-            if (!listNode) {
-                return;
-            }
-            if (!(listNode instanceof ListNode)) {
-                throw new Error("cannot delete node '" + path.toString() + "' from non-list");
-            }
-
-            listNode.remove(path.last());
-            return;
-        } else {
-            listNode = this.resolve_(path.parent(), false);
-
-            if (!(listNode instanceof ContainerNode)) {
-                throw new Error("cannot remove node '" + path.toString() + "' to non-container");
-            }
-            let curNode = this.resolve_(path, false);
-            if (curNode) {
-                curNode.set(this.schema_, path, null);
-            }
-            return;
-        }
-    }
-
-    applyReorder(from:Path, to:Path|null, position:ChangePosition) {
-        let listNode = this.resolve_(from.unsetKeys(), false);
-        if (!listNode) {
-            return;
-        }
-
-        if (!(listNode instanceof ListNode)) {
-            throw new Error("move node '" + from.unsetKeys().toString() + "' is not a list");
-        }
-
-        if (this.schema_.isOrderedList(from)) {
-            listNode.reorder(this.schema_, from.last(), to ? to.last() : null, position);
-        }
-
-    }
-    applyMove(from:Path, to:Path) {
-        let listNode = this.resolve_(from.unsetKeys(), false);
-        if (!listNode) {
-            return;
-        }
-        if (!(listNode instanceof ListNode)) {
-            throw new Error("move node '" + from.unsetKeys().toString() + "' is not a list");
-        }
-
-        if (this.schema_.isOrderedList(from)) {
-            listNode.move(from.last(), to.last());
-        } else {
-            let oldNode = listNode.remove(from.last());
-            if (!oldNode) {
-                throw new Error("move node '" + from.toString() + "' does not exist");
-            }
-            listNode.add(to.last(), oldNode);
-        }
-    }
-    applySet(path:Path, val:any) {
-        let node = this.resolve_(path, false);
-        if (!node) {
-            let parent = this.resolve_(path.parent(), false);
-            if (!parent) {
-                if (this.rootLock_ === 0) {
-                    throw new Error("set node '" + path.toString() + "' does not exist");
-                }
-                let roots = this.getRoots(path);
-                if (roots.length === 0) {
-                    // there is no existing root for this path
-                    // and the roots are locked so we don't want to add it
-                    return;
-                }
-                // this will add the node
-                parent = this.resolve_(path.parent(), true);
-            }
-
-            node = parent.getChildNode(this.schema_, path.last(), path, true);
-        }
-        if (!(node instanceof LeafNode)) {
-            throw new Error("set node '" + path.toString() + "' is not a leaf");
-        }
-        node.setValue(val);
-
-    }
-
-    isRoot(path:Path):boolean {
-        let absolutePath = this.schema_.absolute(path);
-        for (let i = 0; i < this.roots_.length; i++) {
-            let root = this.roots_[i];
-            if (isEqual(absolutePath, this.schema_.absolute(root))) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    /**
-     * @param {!Path} path
-     * @return {!Array<!Path>}
-     */
-    getRoots(path:Path):Path[] {
-        let res:Path[] = [];
-        let me = this;
-        let absolutePath = me.schema_.absolute(path);
-        this.roots_.forEach(function (root) {
-            let absRoot = me.schema_.absolute(root);
-            if (absRoot.isAncestor(absolutePath, true)) {
-                let suffix = absolutePath.getSuffix(absRoot);
-                if (me.schema_.exists(root.appendSuffix(suffix as any))) {
-                    res.push(root);
-                }
-            }
-        });
-        return res;
-    };
-
-    /**
-     * stops new roots from being added this is useful
-     * @param {function()} callback
-     */
-    lockRoots(callback:() => void) {
-        try {
-            this.rootLock_++;
-            callback();
-        } finally {
-            this.rootLock_--;
-        }
-    };
-
-    /**
-     * replaces this db with the src db
-     */
-    replaceDb(srcDb:ChangeDb):Path[] {
-        this.schema_ = srcDb.schema_;
-        this.data_ = clone(srcDb.data_);
-        this.roots_ = [...srcDb.roots_];
-        return this.roots_;
-    }
-    applyChanges(changes:Change[]) {
-        for (let i = 0; i < changes.length; i++) {
-            let change = changes[i];
-            change.applyToDb(this, this.schema_);
-        }
-    }
-
-
-    /**
-     * @param rootPath
-     * @param val
-     * @param opt_filter
-     * @return returns a list of roots that have changed
-     */
-    set(rootPath:Path, val:any, opt_filter?: (v:any) => boolean) {
-        // don't create path if val is null
-        let cur = this.resolve_(rootPath, true);
-
-        let absolutePath = this.schema_.absolute(rootPath);
-        cur.set(this.schema_, rootPath, val, opt_filter);
-        let found = false;
-        let changed = [];
-        for (let i = 0; i < this.roots_.length; i++) {
-            let root = this.roots_[i];
-            found = found || isEqual(root, rootPath);
-            if (this.schema_.absolute(root).isAncestor(absolutePath, true)) {
-                changed.push(root);
-            }
-        }
-
-        /*
-          if (!found && this.rootLock_ === 0) {
-            this.roots_.push(rootPath);
-            changed.push(rootPath);
-        }*/
-        return changed;
-    }
-
-    /**
-     * used to set entire trees as opposed when changes are applied
-     * this checks for null value set and if so does not create ansestors
-     * @return a list of roots that have changed
-     */
-    setRoot(rootPath:Path, val:any, opt_filter?: (v:any) => boolean):Path[] {
-        // don't create path if val is null
-        let cur = this.resolve_(rootPath, val !== null);
-
-        let absolutePath = this.schema_.absolute(rootPath);
-        if (cur) {
-            cur.set(this.schema_, rootPath, val, opt_filter);
-        }
-        let found = false;
-        let changed = [];
-        for (let i = 0; i < this.roots_.length; i++) {
-            let root = this.roots_[i];
-            let equal = isEqual(root, rootPath);
-            found = found || equal;
-            if (this.schema_.absolute(root).isAncestor(absolutePath, true)) {
-                if (cur || equal) {
-                    changed.push(root);
-                }
-            }
-
-        }
-
-        if (!found && this.rootLock_ === 0) {
-            this.roots_.push(rootPath);
-            changed.push(rootPath);
-        }
-
-        return changed;
-    }
-
-    remove(rootPath:Path) {
-        let cur = this.resolve_(rootPath, false);
-        if (!cur) {
-            return;
-        }
-        let absolutePath = this.schema_.absolute(rootPath);
-        let found = false;
-
-        for (let i = this.roots_.length - 1; i >= 0; i--) {
-            let root = this.roots_[i];
-            if (isEqual(root, rootPath)) {
-                this.roots_.splice(i, 1);
-            } else if (this.schema_.absolute(root).isAncestor(absolutePath, true)) {
-                found = true;
-            }
-        }
-        // TODO remove data from the tree no other roots access it
-    }
-
-    private resolve_(path: Path, create: true): ChangeDbNode;
-    private resolve_(path: Path, create: boolean): ChangeDbNode|null;
-    private resolve_(path: Path, create: boolean): ChangeDbNode|null {
-        let items = this.schema_.absolute(path).items();
-        let cur:ChangeDbNode|null = this.data_;
-        let seenItems = [];
-        for (let i = 0; i < items.length && cur; i++) {
-            let item = items[i];
-            let unkeyed = item.unsetKeys();
-            seenItems.push(unkeyed);
-            cur = cur.getChildNode(this.schema_, item, new Path(seenItems), create);
-            if (cur && item.keys().length > 0) {
-                seenItems[seenItems.length - 1] = item;
-                cur = cur.getChildNode(
-                    this.schema_, item,
-                    new Path(seenItems), create);
-            }
-        }
-        return cur;
-    }
-
-    get(rootPath:Path):any {
-        let fullObj = this.resolve_(rootPath, false);
-        if (fullObj === null) {
-            return null;
-        }
-        return fullObj.get(this.schema_, rootPath);
-    };
-}
-
-
 
 
 /**
  * allows override to serialize/deserialize values, eg buffers
  */
 class DefaultValueSerializor implements ValueSerializor {
-    serializeKeys(_path:Path, val:any):any {
+    serializeKeys(_path: Path, val: any): any {
         return val;
     }
+
     serialize(_path: Path, val: any) {
         return val;
     }
-    deserializeKeys(_path:Path, serialized:any):any {
+
+    deserializeKeys(_path: Path, serialized: any): any {
         return serialized;
     }
+
     deserialize(_path: Path, serialized: any) {
         return serialized;
     }
 
 }
-
-
-
-
 
 
 /**
@@ -477,13 +139,14 @@ interface ChangeSetError {
 
 export class DupPk implements ChangeSetError {
     private path_: Path;
-    constructor(path:Path) {
+
+    constructor(path: Path) {
         this.path_ = path;
     }
 }
 
 
-export function inverseChanges(schema:Schema, changes:Change[]):Change[] {
+export function inverseChanges(schema: Schema, changes: Change[]): Change[] {
     let res = [];
     for (let i = changes.length - 1; i >= 0; i--) {
         let c = changes[i].inverse(schema);
@@ -494,9 +157,10 @@ export function inverseChanges(schema:Schema, changes:Change[]):Change[] {
     return res;
 }
 
-type ChangesAndErrors = {changes:Change[],errors:ChangeSetError[]}
+type ChangesAndErrors = { changes: Change[], errors: ChangeSetError[] }
+
 /**
- * caculates a list of changes between an old an new objec
+ * calculates a list of changes between an old an new objec
  *
  * it should be noted the origColumn is used to determine the original key if it is a keyed list
  *
@@ -508,7 +172,10 @@ type ChangesAndErrors = {changes:Change[],errors:ChangeSetError[]}
  * @param changes will add changes to this if provided
  */
 
-export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:Schema, changes:ChangesAndErrors = {changes: [], errors: []}) : ChangesAndErrors {
+export function diff(oldObj: any, newObj: any, path: Path, pkColumn: string, schema: Schema, changes: ChangesAndErrors = {
+    changes: [],
+    errors: []
+}): ChangesAndErrors {
     if (schema.isLeaf(path)) {
         if (oldObj === undefined || oldObj === null) {
             if (newObj === undefined || newObj === null) {
@@ -536,7 +203,7 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
     }
     if (newObj === null || newObj === undefined) {
         let cloned = {...oldObj};
-        for (let k of path.last().keyNames()){
+        for (let k of path.last().keyNames()) {
             delete cloned[k];
         }
         changes.changes.push(new Delete(schema.absolute(path), cloned));
@@ -546,18 +213,17 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
     if (oldObj === null || oldObj === undefined) {
         subChanges = {changes: [], errors: changes.errors};
         changes.changes.push(new Add(schema.absolute(path), subChanges.changes));
-    }
-    else if (schema.isKeyedList(path)) {
-        let needed:{idx: number|null, newIdx: number, key: Path, removeKey?: Path}[] = [];
-        let used:Path[] = [];
+    } else if (schema.isKeyedList(path)) {
+        let needed: { idx: number | null, newIdx: number, key: Path, removeKey?: Path }[] = [];
+        let used: Path[] = [];
         let newRowMap = new Map();
         let oldRowMap = new Map();
         let oldRowPos = new Map<string, number>();
         let curOrder = [];
 
         for (let i = 0; i < newObj.length; i++) {
-            let origKey:string = newObj[i][pkColumn];
-            newRowMap.set(origKey,{idx: i, val: newObj[i]});
+            let origKey: string = newObj[i][pkColumn];
+            newRowMap.set(origKey, {idx: i, val: newObj[i]});
         }
 
         // do any deletes first they are not going to conflict with any existing keys
@@ -566,7 +232,7 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
             let oldKey = schema.createKeyPath(path, oldChild);
             let oldPk = oldChild[pkColumn];
             oldRowMap.set(oldPk, oldChild);
-            oldRowPos.set(oldPk,  i);
+            oldRowPos.set(oldPk, i);
             let newChildEntry = newRowMap.get(oldPk);
             if (newChildEntry && newChildEntry.val) {
                 let newKey = schema.createKeyPath(path, newChildEntry.val);
@@ -574,12 +240,10 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
                 curOrder.push(oldChild);
                 if (!isEqual(newKey, oldKey)) {
                     needed.push({idx: i, newIdx: newChildEntry.idx, key: newKey, removeKey: oldKey});
-                }
-                else {
+                } else {
                     diff(oldChild, newChildEntry.val, newKey, pkColumn, schema, changes);
                 }
-            }
-            else {
+            } else {
                 diff(oldChild, undefined, oldKey, pkColumn, schema, changes);
             }
         }
@@ -595,19 +259,17 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
 
 
         while (needed.length > 0) {
-            let newNeeded:{idx: number|null, newIdx: number, key: Path, removeKey?: Path}[] = [];
-            needed.forEach((info)=> {
+            let newNeeded: { idx: number | null, newIdx: number, key: Path, removeKey?: Path }[] = [];
+            needed.forEach((info) => {
                 if (ChangeSet.findPath(info.key, used)) {
                     newNeeded.push(info);
-                }
-                else {
+                } else {
                     if (info.removeKey) {
                         diff(oldObj[info.idx as number], newObj[info.newIdx], info.removeKey, pkColumn, schema,
-                                                 changes);
+                            changes);
                         changes.changes.push(new Move(schema.absolute(info.removeKey), schema.absolute(info.key)));
                         ChangeSet.removePath(info.removeKey, used);
-                    }
-                    else {
+                    } else {
                         diff(null, newObj[info.newIdx], info.key, pkColumn, schema, changes);
                     }
                     used.push(info.key);
@@ -619,7 +281,7 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
                 // first build up a map of dup needed or in used if they are in there then they are real duplicate
                 // add to errors
                 // the rest are just loops pick one and do a delete
-                needed.forEach(function(info) {
+                needed.forEach(function (info) {
                     changes.errors.push(new DupPk(schema.absolute(info.key)));
                 });
                 break;
@@ -629,7 +291,7 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
         if (schema.isOrderedList(path)) {
             let prev = null;
             let nextCur = 0;
-            let seen= new Set<string>();
+            let seen = new Set<string>();
             for (let i = 0; i < newObj.length; i++) {
                 let child = newObj[i];
                 if (nextCur < curOrder.length) {
@@ -661,7 +323,7 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
     }
 
     schema.children(path).forEach(
-        function(child) {
+        function (child) {
             let keys = schema.keys(path);
             if (keys.indexOf(child) !== -1) {
                 return;
@@ -675,51 +337,256 @@ export function diff(oldObj:any, newObj:any, path:Path, pkColumn:string, schema:
 
 }
 
-interface ChangeDbNode {
-    get(schema:Schema, path:Path):any;
-    updatePk(schema:Schema, path:Path, keys:any[]):void;
-    /**
-     * @param schema
-     * @param item the item to create or get
-     * @param path if not null then specifies what type to create otherwise creates container
-     * @param create create if not present
-     */
-    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: true): ChangeDbNode;
-    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode|null;
-    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode|null;
-    set(schema:Schema, path:Path, val:any, opt_filter?:(v:any) => boolean):void;
-    setKeys(item: PathItem): void;
 
-}
-
-export function createDbNode(schema:Schema, path:Path) :ChangeDbNode{
+export function createDbNode(schema: Schema, path: Path, parent: ChangeDbNode): ChangeDbNode {
     if (schema.isKeyedList(path)) {
-        return new ListNode();
+        return new ListNode(parent, path);
+    }
+    if (schema.isList(path)) {
+        return new IndexedListNode(parent, path);
     }
     if (schema.isLeaf(path)) {
-        return new LeafNode();
+        return new LeafNode(parent, path);
     }
-    return new ContainerNode();
+    return new ContainerNode(parent, path);
 
 }
 
-export class LeafNode implements ChangeDbNode {
+
+type ContainerChildrenType = { [key: string]: ChangeDbNode };
+export type ChangeListenerKeyType = { listener: Listener, path: Path, filter: ReferenceFilter };
+
+export abstract class ChangeDbNode {
+    private parent_: ChangeDbNode | null = null;
+    protected readonly absolutePath_: Path;
+
+    /**
+     * the number references that point a child node but not directly to this node
+     *
+     */
+    private descendantRefs_ = 0;
+    private readonly changeListeners_ = new AvlTree<{ key: ChangeListenerKeyType, count: number }, {
+        key: ChangeListenerKeyType
+    }>(compareKey);
+
+    abstract get(schema: Schema, path: Path, getter:FilterGetter, filter:ReferenceFilter, serialized?:boolean): any;
+
+    abstract updatePk(schema: Schema, path: Path, keys: any[]): void;
+
+    abstract getChildNode(schema: Schema, item: PathItem | null, path: Path, create: true): ChangeDbNode;
+    abstract getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode | null;
+    abstract getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode | null;
+    abstract getChildNode(schema: unknown, item: unknown, path: unknown, create: unknown): ChangeDbNode | null;
+    abstract cloneData(parent:ChangeDbNode) : ChangeDbNode;
+
+
+    abstract getChildren(): ChangeDbNode[];
+
+    /**
+     *
+     * @param db
+     * @param schema
+     * @param path
+     * @param val
+     * @param opt_filter
+     * @param serialized is the data we are setting serialize
+     * @return if null then there were no changes, otherwise a list of changes to listeners to notify
+     */
+    abstract set(db: ChangeDbInterface, schema: Schema, getter:FilterGetter, path: Path, val: any, opt_filter?: ReferenceFilter, serialize?: boolean): ChangeListenerKeyType[] | null;
+
+    abstract setKeys(item: PathItem): void;
+
+
+    addChangeListener(path: Path, listener: Listener, filter: ReferenceFilter) {
+        let key = {path, listener, filter};
+        this.changeListeners_.safeFind({key, count: 0}).count++;
+        this.parent()?.updateDescendantReferences(1);
+    }
+
+    removeChangeListener(path: Path, listener: Listener, filter: ReferenceFilter) {
+        let key = {path, listener, filter};
+        let found = this.changeListeners_.findFirst({key});
+        if (found) {
+            if (found.count > 0) {
+                found.count--;
+                this.parent()?.updateDescendantReferences(-1);
+            }
+            if (found.count <= 0) {
+                this.changeListeners_.remove({key})
+            }
+        }
+    }
+
+    getChangeListeners():ChangeListenerKeyType[] {
+        let res:ChangeListenerKeyType[] = [];
+
+        for (let {key:listener} of this.changeListeners_) {
+            res.push(listener);
+        }
+        return res;
+
+    }
+
+    updateDescendantReferences(count: number): void {
+        let cur: ChangeDbNode | null = this;
+        while (cur) {
+            cur.descendantRefs_ += count;
+            cur = cur.parent_;
+        }
+    }
+
+    constructor(parent: ChangeDbNode | null, absolutePath:Path) {
+        this.parent_ = parent;
+        this.absolutePath_ = absolutePath;
+    }
+
+    addUnresolved(unresolved: Map<ReferenceFilter, PathListenerType[]>) {
+        let added = 0;
+        for (let [filter, listeners] of unresolved) {
+            added += listeners.length;
+            for (let pathListeners of listeners) {
+                this.addChangeListener(pathListeners.path, pathListeners.listener, filter);
+            }
+        }
+    }
+
+
+    /**
+     * how many references are there this includes direct listeners,
+     * number of things listening to my children
+     */
+
+    public getReferenceCount(): number {
+        let sum = this.descendantRefs_;
+        for (let l of this.changeListeners_) {
+            sum += l.count;
+        }
+        return sum;
+    }
+
+
+    parent(): ChangeDbNode | null {
+        return this.parent_;
+    }
+
+    /**
+     * removes any node that doesn't have references to it
+     *
+     * @param root
+     * @return true if there are no refs and node should be deleted
+     */
+    cleanupTree(): boolean {
+        for (let child of this.getChildren()) {
+            if (child.getReferenceCount() == 0) {
+                this.removeChild(child);
+            }
+        }
+        return this.getReferenceCount() === 0;
+    }
+
+    abstract removeChild(child: ChangeDbNode): void;
+
+    protected getRoot() {
+        let cur: ChangeDbNode = this;
+        while (cur.parent_) {
+            cur = cur.parent_
+        }
+        return cur;
+    }
+
+    addAncestorListeners(changed: ChangeListenerKeyType[]) {
+        let cur = this.parent();
+        while (cur) {
+            for (let l of cur.changeListeners_) {
+                changed.push(l.key);
+            }
+            cur = cur.parent_;
+        }
+    }
+
+    /**
+     * just get the object, ignore schema, references, filters used for testing to see what is actually in the database
+     */
+    abstract unsafeGet(): any;
+
+    notifyMove(from: Path, to: Path) {
+        if (!this.absolutePath_.isAncestor(from, true)) {
+            return;
+        }
+        let toMove:{l: { key: ChangeListenerKeyType, count: number }, newPath: Path}[] = [];
+        for (let l of this.changeListeners_) {
+            //{ listener: Listener, path: Path, filter: ReferenceFilter }
+            if (from.isAncestor(l.key.path, true)) {
+                let newPath = l.key.path.move(from, to);
+                toMove.push({l, newPath});
+                l.key.listener.path(newPath);
+            }
+        }
+        for (let moving of toMove) {
+            this.changeListeners_.remove(moving.l);
+            this.changeListeners_.add({key: {...moving.l.key, path: moving.newPath}, count: moving.l.count });
+
+        }
+        for (let child of this.getChildren()) {
+            child.notifyMove(from, to);
+        }
+        for (let moving of toMove) {
+            moving.l.key.listener.path(moving.newPath);
+        }
+    }
+}
+
+
+export class LeafNode extends ChangeDbNode {
     private value_: Primitive;
-    set(schema: Schema, path: Path, val: any, opt_filter?: (v:any) => boolean) {
-        this.value_ = val;
+
+    constructor(parent:ChangeDbNode, absolutePath:Path) {
+        super(parent, absolutePath);
+    }
+    cloneData(parent:ChangeDbNode): ChangeDbNode {
+        let res = new LeafNode(parent, this.absolutePath_);
+        res.value_ = this.value_;
+        return res;
+    }
+
+    getChildren(): ChangeDbNode[] {
+        return [];
+    }
+
+    removeChild(child: ChangeDbNode) {
+    }
+
+    set(db: ChangeDbInterface, schema: Schema,getter:FilterGetter,  path: Path, val: any, opt_filter: ReferenceFilter = trueFilter, serialized:boolean = false):ChangeListenerKeyType[]|null {
+        // what happens if
+        // 1. the value changes and the filter is no longer applies
+        // 2. the value changes and the filter now applies
+        if (serialized) {
+            this.value_ = schema.deserialize(path, val);
+        }
+        else {
+            this.value_ = val;
+        }
+        return this.getChangeListeners();
     }
 
     updatePk(schema: Schema, path: Path, keys: any[]) {
         // leaves don't have primary keys
     }
 
-    get(schema: Schema, path: Path): Primitive {
+    get(schema: Schema, path: Path, getter:FilterGetter, filter:ReferenceFilter, serialized: boolean = false): any {
+        if (serialized) {
+            return schema.serialize(path, this.value_)
+        }
+        return this.value_;
+    }
+    unsafeGet():any {
         return this.value_;
     }
 
     setValue(val: any) {
         this.value_ = val;
     }
+
     setKeys(item: PathItem): void {
     }
 
@@ -731,22 +598,45 @@ export class LeafNode implements ChangeDbNode {
 
      */
     getChildNode(schema: Schema, item: PathItem | null, path: Path, create: true): ChangeDbNode;
-    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode|null;
-    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode|null {
+    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode | null;
+    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode | null {
         throw 'unsupported operation, leaves have no children';
     }
 }
 
-
-type ContainerChildrenType = { [key: string]: ChangeDbNode };
-
-export class ContainerNode implements ChangeDbNode {
+export class ContainerNode extends ChangeDbNode {
     private children_: ContainerChildrenType = {};
-    private useVal_ = false;
+    private useVal_ = false; // only true for null and undefined
     private val_: StructType | null = null;
 
+    cloneData(parent: ChangeDbNode): ChangeDbNode {
+        let res = new ContainerNode(parent,this.absolutePath_);
+        res.val_ = this.val_;
+        res.useVal_ = this.useVal_;
+        for (let childName in this.children_) {
+            res.children_[childName] = this.children_[childName].cloneData(res);
+        }
+        return res;
+    }
+
+    removeChild(child: ChangeDbNode) {
+        for (let name in this.children_) {
+            if (this.children_[name] === child) {
+                delete this.children_[name];
+            }
+        }
+    }
+
+    getChildren(): ChangeDbNode[] {
+        let res: ChangeDbNode[] = [];
+        for (let name in this.children_) {
+            res.push(this.children_[name]);
+        }
+        return res;
+    }
 
     updatePk(schema: Schema, path: Path, keys: any[]) {
+
         // update the keys in the node
         let item = path.last();
         let names = item.keyNames();
@@ -756,11 +646,11 @@ export class ContainerNode implements ChangeDbNode {
             let child = names[i];
             let val = keys[i];
             if (!children[child]) {
-                children[child] = new LeafNode();
+                children[child] = new LeafNode(this, this.absolutePath_.appendName(child));
                 this.useVal_ = false;
             }
             let node = children[child];
-            if (! (node instanceof LeafNode)) {
+            if (!(node instanceof LeafNode)) {
                 throw Error('Key not leaf node')
             }
             node.setValue(val);
@@ -778,29 +668,30 @@ export class ContainerNode implements ChangeDbNode {
             let child = names[i];
             let val = keys[i];
             if (!children[child]) {
-                children[child] = new LeafNode();
+                children[child] = new LeafNode(this, this.absolutePath_.appendName(child));
                 this.useVal_ = false;
             }
             let node = children[child];
-            if (! (node instanceof LeafNode)) {
+            if (!(node instanceof LeafNode)) {
                 throw Error('Key not leaf node')
             }
             node.setValue(val);
         }
     }
 
-    set(schema: Schema, path: Path, val: any, opt_filter?: (v: any) => boolean) {
+    set(database: ChangeDbInterface, schema: Schema, getter:FilterGetter, path: Path, val: any, opt_filter: ReferenceFilter = trueFilter, serialized: boolean = false):ChangeListenerKeyType[]|null {
         let children = this.children_;
-        if (val) {
+        let changes:ChangeListenerKeyType[] = this.getChangeListeners();
+        if (val != undefined) {
             this.useVal_ = false;
             for (let child of schema.children(path)) {
+                let subPath = path.appendName(child);
                 if (val.hasOwnProperty(child)) {
-                    let subPath = path.appendName(child);
                     if (!children[child]) {
-                        children[child] = createDbNode(schema, subPath);
+                        children[child] = createDbNode(schema, subPath, this);
                     }
-                    children[child].set(schema, subPath, val[child]);
-                } else {
+                    changes.push(...children[child].set(database, schema, getter, subPath, val[child], opt_filter, serialized) || []);
+                } else if (opt_filter(getter, subPath)) {
                     delete children[child];
                 }
             }
@@ -809,26 +700,39 @@ export class ContainerNode implements ChangeDbNode {
             this.children_ = {};
             this.val_ = val;
         }
+        return changes;
     }
 
     remove(item: PathItem) {
         delete this.children_[item.name()];
     }
 
-    get(schema: Schema, path: Path):StructType|null {
-        let res:StructType = {};
+    get(schema: Schema, path: Path, getter:FilterGetter, filter:ReferenceFilter, serialized:boolean = false): StructType | null {
+        let res: StructType = {};
         if (this.useVal_) {
             return this.val_;
         }
         let children = this.children_;
         for (let child of schema.children(path)) {
-            if (children.hasOwnProperty(child)) {
-                res[child] = children[child].get(schema, path.appendName(child));
+            let childPath = path.appendName(child);
+            if (children.hasOwnProperty(child) && filter(getter, childPath)) {
+                res[child] = children[child].get(schema, childPath, getter, filter, serialized);
             }
         }
         return res;
     }
 
+    unsafeGet(): any {
+        let res: StructType = {};
+        if (this.useVal_) {
+            return this.val_;
+        }
+        let children = this.children_;
+        for (let childName in this.children_) {
+            res[childName] = this.children_[childName].unsafeGet();
+        }
+        return res;
+    }
 
     /**
      * @param schema
@@ -836,9 +740,9 @@ export class ContainerNode implements ChangeDbNode {
      * @param path if not null then specifies what type to create otherwise creates container
      * @param create create if not present
      */
-    getChildNode(schema: Schema, item:PathItem, path: Path,create:true) :ChangeDbNode;
-    getChildNode(schema: Schema, item:PathItem, path: Path,create:boolean) :ChangeDbNode|null;
-    getChildNode(schema: Schema, item:PathItem, path: Path,create:boolean) :ChangeDbNode|null {
+    getChildNode(schema: Schema, item: PathItem, path: Path, create: true): ChangeDbNode;
+    getChildNode(schema: Schema, item: PathItem, path: Path, create: boolean): ChangeDbNode | null;
+    getChildNode(schema: Schema, item: PathItem, path: Path, create: boolean): ChangeDbNode | null {
         let res = this.children_[item.name()];
         if (res) {
             return res;
@@ -847,9 +751,9 @@ export class ContainerNode implements ChangeDbNode {
             return null;
         }
         if (path) {
-            res = createDbNode(schema, path);
+            res = createDbNode(schema, path, this);
         } else {
-            res = new ContainerNode();
+            res = new ContainerNode(this, this.absolutePath_.append(item));
         }
         this.children_[item.name()] = res;
         this.useVal_ = false;
@@ -857,11 +761,45 @@ export class ContainerNode implements ChangeDbNode {
     }
 }
 
-type ListNodeKeyType = { key: any, pos: number, value: ChangeDbNode|null };
-class ListNode implements ChangeDbNode {
-    private keys_ = new AvlTree<ListNodeKeyType>(compareKey);
-    private positions_ = new AvlTree<number>(compare);
+type ListNodeKeyType = { key: any, pos: number, value: ChangeDbNode, lookup?: any };
 
+export class IndexedListNode extends ChangeDbNode {
+    private items_: ChangeDbNode[]|null|undefined;
+
+    cloneData(parent: ChangeDbNode): IndexedListNode {
+        let res = new IndexedListNode(parent, this.absolutePath_);
+
+        if (this.items_) {
+            res.items_ = this.items_.map(v => v.cloneData(res));
+        }
+        else {
+            res.items_= this.items_;
+        }
+        return res;
+    }
+
+    getChildren(): ChangeDbNode[] {
+        return this.items_ || [];
+    }
+
+    /**
+     * this is used to remove a child however we can't delete it since that would screw up other indexed references,
+     * what we will do is replace it with undefinde
+     *
+     * @param child
+     */
+    removeChild(child: ChangeDbNode) {
+        if (this.items_) {
+            for (let i = 0; i < this.items_.length; i++) {
+                if (this.items_[i] === child) {
+                    let newVal = new LeafNode(this, this.absolutePath_.appendIndex(i));
+                    newVal.setValue(undefined)
+                    this.items_[i] = newVal;
+                    break;
+                }
+            }
+        }
+    }
 
     /**
      * @param schema
@@ -869,7 +807,221 @@ class ListNode implements ChangeDbNode {
      * @param {!Array<?>} keys
      */
     updatePk(schema: Schema, path: Path, keys: any[]) {
-        let removed = this.keys_.remove({key: path.lastKeys(), pos: 0, value: null});
+    }
+
+    set(db: ChangeDbInterface, schema: Schema, getter:FilterGetter, path: Path, val: any, opt_filter: ReferenceFilter = trueFilter, serialized:boolean= false): ChangeListenerKeyType[] | null {
+        let changes:ChangeListenerKeyType[] = [];
+        if (val) {
+            this.items_ = this.items_ || [];
+            for (let i = 0; i < val.length; i++) {
+                let subPath = path.appendIndex(i);
+                let newNode = createDbNode(schema, subPath, this);
+                if (i < this.items_.length) {
+                    let old = this.items_[i];
+                    if (newNode.constructor === old.constructor) {
+                        newNode = old;
+                    }
+                    else {
+                        // todo transfer references from old to new
+                    }
+                }
+                else {
+                    this.items_.push(newNode)
+                }
+                changes.push(...(newNode.set(db, schema, getter, subPath, val[i], opt_filter, serialized) || []));
+            }
+            if (val.length < this.items_.length) {
+                // todo remove references from old nodes
+                this.items_.splice(val.length, this.items_.length - val.length);
+            }
+        }
+        else if (schema.allowNullValue(path, val)) {
+            this.items_ = val;
+        }
+        changes.push(...this.getChangeListeners())
+        return changes;
+    }
+
+
+    move(from: PathItem, to: PathItem): ChangeDbNode {
+        let fromIndex = from.getLastIndex();
+        let toIndex = to.getLastIndex();
+
+        if (fromIndex === null || toIndex === null) {
+            throw new Error("move node '" + from.toString() + "' to '" + to.toString() +  "' index does not exist");
+        }
+
+        if (!this.items_ || fromIndex < 0 || fromIndex >= this.items_.length) {
+            throw new Error("move node '" + from.toString() + "' does not exist");
+        }
+        if (toIndex >= this.items_.length || toIndex < 0) {
+            throw new Error("moving node '" + from.toString() + "' to '" + to.toString() +  "' would move it out of the list");
+        }
+
+        if (fromIndex === toIndex) {
+            return this.items_[fromIndex];
+        }
+
+
+
+        let item = this.items_.splice(fromIndex, 1)[0];
+        this.items_.splice(toIndex, 0, item);
+        return  item;
+    }
+
+    reorder(schema: Schema, from: PathItem, to: PathItem | null, position: ChangePosition) {
+        let fromIndex = from.getLastIndex();
+        if (to && to.getLastIndex() === null) {
+            return;
+        }
+        let toIndex = to ? to.getLastIndex() : null;
+
+        if (this.items_ == null || fromIndex === null || fromIndex < 0 || fromIndex >= this.items_.length) {
+            return;
+        }
+
+        if (fromIndex === toIndex) {
+            return;
+        }
+
+        if (toIndex === null) {
+            let item = this.items_.splice(fromIndex, 1)[0];
+            if (position == ChangePosition.AFTER) {
+                this.items_.unshift(item);
+            }
+            else {
+                this.items_.push(item);
+            }
+            return;
+        }
+
+        if (toIndex < 0 || toIndex >= this.items_.length) {
+            return;
+        }
+
+
+        let item = this.items_.splice(fromIndex, 1)[0];
+        let adjIndex = fromIndex < toIndex ? -1 : 1;
+        if (position == ChangePosition.AFTER) {
+            this.items_.splice(fromIndex + adjIndex + 1, 0, item);
+        } else {
+            this.items_.splice(fromIndex + adjIndex, 0, item);
+        }
+
+
+    }
+
+    remove(item: PathItem): ChangeDbNode | null {
+        let index = item.getLastIndex();
+        if (this.items_ && index !== null && index < this.items_.length && index >= 0) {
+            this.items_.splice(index, 1)[0];
+
+        }
+        return null;
+    }
+
+    add(item: PathItem, node: ChangeDbNode) {
+        node.setKeys(item);
+        if (!this.items_) {
+            this.items_ = [];
+        }
+        this.items_.push(node);
+    }
+
+    unsafeGet(): any {
+        if (this.items_) {
+            let res:any[] = [];
+            for (let val of this.items_) {
+                res.push(val.unsafeGet());
+            }
+            return res;
+        }
+        return this.items_;
+    }
+
+    get(schema: Schema, path: Path, getter:FilterGetter, filter: ReferenceFilter, serialized:boolean = false): any[]|undefined|null {
+        if (this.items_) {
+            let res:any[] = [];
+            let i = 0;
+            for (let val of this.items_) {
+                let subPath = path.appendIndex(i);
+                if (filter(getter, subPath)) {
+                    // not sure filtering here seem like a bad idea how can we tell if 2 filters differ and we are indexing
+                    // stuff
+                    res.push(val.get(schema, subPath, getter, filter, serialized));
+                }
+                i++
+            }
+            return res;
+        }
+        return this.items_;
+    }
+
+    setKeys(item: PathItem): void {
+    }
+
+    /**
+     * @param schema
+     * @param item the item to create or get
+     * @param path if not null then specifies what type to create otherwize creates container
+     * @param create create if not present
+     */
+    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: true): ChangeDbNode;
+    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode | null;
+    getChildNode(schema: Schema, item: PathItem, path: Path, create: boolean): ChangeDbNode | null {
+        let absPath = schema.absolute(path);
+        let index = item.getLastIndex();
+        if (index !== null) {
+            if (this.items_ && index < this.items_.length) {
+                return this.items_[index];
+            }
+            if (create) {
+                this.items_ = this.items_ || [];
+                // create all the nodes upto this index
+                for (let i = this.items_.length; i < index; i++) {
+                    this.items_.push(createDbNode(schema, absPath.setIndex(i), this));
+                }
+                return createDbNode(schema, absPath, this);
+            }
+        }
+        return null;
+    }
+
+}
+
+
+export class ListNode extends ChangeDbNode {
+    private keys_ = new AvlTree<ListNodeKeyType, { key: any }>(compareKey);
+    private positions_ = new AvlTree<number>(compare);
+    private nullState_ = NullState.isUndefined;
+
+    cloneData(parent: ChangeDbNode): ChangeDbNode {
+        let res = new ListNode(parent, this.absolutePath_);
+
+        this.positions_.inOrderTraverse(v => res.positions_.add(v));
+        this.keys_.inOrderTraverse(v => res.keys_.add({key: v.key, pos: v.pos, value: v.value.cloneData(res)}));
+        return res;
+    }
+
+    getChildren(): ChangeDbNode[] {
+        return this.keys_.toList().map(v => v.value);
+    }
+
+    removeChild(child: ChangeDbNode) {
+        let matches = this.keys_.toList().filter(v => v.value === child);
+        if (matches.length > 0) {
+            this.keys_.remove(matches[0]);
+            this.positions_.remove(matches[0].pos)
+        }
+    }
+
+    /**
+     * @param schema
+     * @param {!Path} path
+     * @param {!Array<?>} keys
+     */
+    updatePk(schema: Schema, path: Path, keys: any[]) {
+        let removed = this.keys_.remove({key: path.lastKeys()});
         if (removed) {
             let last = path.last();
             let newNode = {...removed};
@@ -882,76 +1034,81 @@ class ListNode implements ChangeDbNode {
 
     }
 
-    set(schema: Schema, path: Path, val: any, opt_filter?: (v: any) => boolean) {
+    set(db: ChangeDbInterface, schema: Schema, getter:FilterGetter, path: Path, val: any, opt_filter: ReferenceFilter = trueFilter, serialized: boolean=false): ChangeListenerKeyType[] | null {
         let keys = this.keys_;
         // we could schemas that filter nodes but not yet
-        let newKeys = new AvlTree<ListNodeKeyType>(compareKey);
+        let newKeys = new AvlTree<ListNodeKeyType, { key: any }>(compareKey);
         let newPositions = new AvlTree<number>(compare);
-        let partial = schema.isPartial(path);
+        let changes:ChangeListenerKeyType[] = []
         if (val) {
-            let pos = 0;
-            let maxPos = 0;
-            if (partial || opt_filter) {
-                this.keys_.inOrderTraverse(function (val) {
-                    maxPos = Math.max(val.pos + 1, maxPos);
-                });
-            }
-            for (let item of val) {
-                let ourPos = pos;
-                // if this partial then our pos needs to be calculated
-                let subKey = schema.createKeyPath(path, item);
-                if (partial || opt_filter) {
-                    let oldNode = keys.findFirst({
-                        key: subKey.lastKeys(),
-                        pos: ourPos,
-                        value: new ContainerNode()
-                    });
-                    if (oldNode) {
-                        ourPos = oldNode.pos;
-                    } else {
-                        ourPos = maxPos;
-                        maxPos++;
-                    }
-                }
-
-
-                newPositions.add(ourPos);
-                let newNode = keys.safeFind({
-                    key: subKey.lastKeys(),
-                    pos: ourPos,
-                    value: new ContainerNode()
-                });
-                pos++;
-                newNode.value?.set(schema, subKey, item);
-                newKeys.add(newNode);
-            }
+            this.setKeyedList(db, schema, getter, path, val, keys, newPositions, newKeys, changes, opt_filter, serialized);
         }
-        if (opt_filter) {
-            this.keys_.inOrderTraverse(function (item) {
-                let subKey = schema.createKeyPath(path, item.value);
-                // leave anything that doesn't match the query here we are not replacing these
+        else if (schema.allowNullValue(path, val)) {
+            this.nullState_ = val === null ? NullState.isNull :  NullState.isUndefined;
+        }
+        this.keys_ = newKeys;
+        this.positions_ = newPositions;
 
-                if (!opt_filter(item.value?.get(schema, subKey))) {
-                    if (!newKeys.findFirst(item)) {
-                        newKeys.add(item);
-                    }
-                }
+        changes.push(...this.getChangeListeners())
+        return changes;
+    }
+
+    private setKeyedList(
+        db: ChangeDbInterface, schema: Schema, getter: FilterGetter, path: Path, val: any,
+        keys: AvlTree<ListNodeKeyType, {key: any}>,
+        newPositions: AvlTree<number, number>,
+        newKeys: AvlTree<ListNodeKeyType, {key: any}>,
+        changes: ChangeListenerKeyType[], opt_filter: ReferenceFilter, serialized: boolean) {
+        let pos = 0;
+        let maxPos = 0;
+        for (let keyVal of this.keys_) {
+            maxPos = Math.max(keyVal.pos + 1, maxPos);
+        }
+        for (let item of val) {
+            let ourPos = pos;
+            // if this partial then our pos needs to be calculated
+            let subKey = schema.createKeyPath(path, item);
+            let oldNode = keys.findFirst({
+                key: subKey.lastKeys()
             });
-        } else if (partial) {
-            this.keys_.inOrderTraverse(function (item) {
+            if (oldNode) {
+                ourPos = oldNode.pos;
+            } else {
+                ourPos = maxPos;
+                maxPos++;
+            }
+            newPositions.add(ourPos);
+            let existing = keys.findFirst({key: subKey.lastKeys()});
+            let absSubPath = schema.absolute(subKey);
+            let newNode = existing || keys.safeFind({
+                key: subKey.lastKeys(),
+                pos: ourPos,
+                value: new ContainerNode(this, absSubPath)
+            });
+            pos++;
+            let subChanges = newNode.value.set(db, schema, getter, subKey, item, opt_filter, serialized);
+            newKeys.add(newNode);
+            if (subChanges) {
+                changes.push(...subChanges);
+            }
+
+        }
+        this.keys_.inOrderTraverse((item) => {
+
+
+            let subKey = path.setKeys(schema.keys(path), item.key);
+            // leave anything that doesn't match the query here we are not replacing these
+            if (!opt_filter(getter, subKey)) {
                 if (!newKeys.findFirst(item)) {
                     newKeys.add(item);
                 }
-            });
-        }
-
-        this.keys_ = newKeys;
-        this.positions_ = newPositions;
+            }
+        });
     }
 
     move(from: PathItem, to: PathItem): ChangeDbNode {
 
-        let node = this.keys_.remove({key: from.keys(), pos: 0, value: null});
+        let node = this.keys_.remove({key: from.keys()});
         if (node && node.value) {
             node.value.setKeys(to);
             this.keys_.add({key: to.keys(), pos: node.pos, value: node.value});
@@ -961,8 +1118,8 @@ class ListNode implements ChangeDbNode {
         }
     }
 
-    reorder(schema: Schema, from: PathItem, to: PathItem|null, position: ChangePosition) {
-        let changeEntry = this.keys_.findFirst({key: from.keys(), pos: 0, value: null});
+    reorder(schema: Schema, from: PathItem, to: PathItem | null, position: ChangePosition) {
+        let changeEntry = this.keys_.findFirst({key: from.keys()});
         let pos = 0;
         // new order of the list
         let order = [];
@@ -974,7 +1131,7 @@ class ListNode implements ChangeDbNode {
         }
 
         let entries = [...this.keys_];
-        entries.sort( (e1, e2) => e1.pos - e2.pos);
+        entries.sort((e1, e2) => e1.pos - e2.pos);
         let found = false;
         if (position === after && !to) {
             // gos in the first position
@@ -1010,7 +1167,7 @@ class ListNode implements ChangeDbNode {
         if (found) {
             let me = this;
             this.positions_ = new AvlTree(compare);
-            this.keys_ = new AvlTree<ListNodeKeyType>(compareKey);
+            this.keys_ = new AvlTree<ListNodeKeyType, { key: any }>(compareKey);
             order.forEach(function (e) {
                 me.keys_.add(e);
                 me.positions_.add(e.pos);
@@ -1020,7 +1177,7 @@ class ListNode implements ChangeDbNode {
     }
 
     remove(item: PathItem): ChangeDbNode | null {
-        let node = this.keys_.remove({key: item.keys(), pos: 0, value: null});
+        let node = this.keys_.remove({key: item.keys()});
         if (node) {
             this.positions_.remove(node.pos);
             return node.value;
@@ -1035,24 +1192,49 @@ class ListNode implements ChangeDbNode {
         this.keys_.add({key: item.keys(), pos: pos, value: node});
     }
 
-    get(schema: Schema, path: Path): any[] {
-        let res: any[]= [];
-        let map = this.keys_ ;
+    static comparePosThenKey(x:{pos: number, key:any}, y:{pos: number, key:any}) :number {
+        let res = x.pos - y.pos;
+        if (res !== 0) {
+            return res;
+        }
+        return compare(x.key, y.key );
+    }
+    unsafeGet(): any {
+        let res:any[] = [];
+        let map = new AvlTree<ListNodeKeyType, { key: any, pos: number }>(ListNode.comparePosThenKey, this.keys_);
+        for (let val of map) {
+            res.push(val.value.unsafeGet());
+        }
+        return res;
+    }
+
+    get(schema: Schema, path: Path, getter:FilterGetter, filter: ReferenceFilter, serialized: boolean = false): any[]|undefined|null {
+        let res: any[] = [];
+        let map = this.keys_;
+        if (this.nullState_ != NullState.isUndefined) {
+            return this.nullState_ === NullState.isNull ? null : undefined;
+        }
         if (schema.isOrderedList(path)) {
-            map = new AvlTree<{ key: any, pos: number, value: ChangeDbNode|null }>(compareKey);
-            for(let val of this.keys_) {
-                map.add({value: val.value, key: val.pos, pos:0});
+            map = new AvlTree<ListNodeKeyType, { key: any }>(compareKey);
+            for (let val of this.keys_) {
+                map.add({value: val.value, key: val.pos, lookup: val.key, pos: 0});
             }
         }
+
         for (let val of map) {
-            let subKey = schema.createKeyPath(path, val.value);
+            // we use lookup not key here because we want the real key to set the path not the index
+            let subKey = path.setKeys(schema.keys(path), val.lookup || val.key);
             if (val.value) {
-                res.push(val.value.get(schema, subKey));
+                if (filter(getter, subKey)) {
+                    res.push(val.value.get(schema, subKey, getter, filter, serialized));
+                }
             }
         }
         return res;
     }
-    setKeys(item: PathItem): void {}
+
+    setKeys(item: PathItem): void {
+    }
 
     /**
      * @param schema
@@ -1061,9 +1243,9 @@ class ListNode implements ChangeDbNode {
      * @param create create if not present
      */
     getChildNode(schema: Schema, item: PathItem | null, path: Path, create: true): ChangeDbNode;
-    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode|null;
-    getChildNode(schema: Schema, item:PathItem, path:Path, create:boolean): ChangeDbNode|null {
-        let lookup = {key: item.keys(), pos: 0, value: new ContainerNode()};
+    getChildNode(schema: Schema, item: PathItem | null, path: Path, create: boolean): ChangeDbNode | null;
+    getChildNode(schema: Schema, item: PathItem, path: Path, create: boolean): ChangeDbNode | null {
+        let lookup = {key: item.keys(), pos: 0, value: new ContainerNode(this, schema.absolute(path))};
         let entry = create ?
             this.keys_.safeFind(lookup) : this.keys_.findFirst(lookup);
         if (entry) {
@@ -1072,5 +1254,7 @@ class ListNode implements ChangeDbNode {
         return null;
 
     }
+
 }
+
 

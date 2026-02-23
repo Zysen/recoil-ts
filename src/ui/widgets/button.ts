@@ -13,6 +13,15 @@ import {EventType} from "../dom/eventtype.ts";
 import {EnabledTooltipHelper} from "../tooltiphelper.ts";
 import {AttachCallbackType} from "../../frp/struct.ts";
 
+export type ButtonAttachType = AttachCallbackType<{value:MouseEvent},{
+    text:string|Message,
+    enabled?: BoolWithExplanation,
+    classes?: string[],
+    confirmAni?: AniFunc,
+    confirm?: number, // time needed for confirmation in ms
+    tooltip?: Message,
+}>
+
 export type AniFunc = (container:HTMLElement, position:{x: number, y: number, height: number, width: number}, progress:number) => void;
 
 export class ButtonWidget extends Widget implements AttachableWidget {
@@ -146,14 +155,7 @@ export class ButtonWidget extends Widget implements AttachableWidget {
 
     }
 
-    attachStruct(value: AttachCallbackType<{value:MouseEvent},{
-        text:string|Message,
-        enabled?: BoolWithExplanation,
-        classes?: string[],
-        confirmAni?: AniFunc,
-        confirm?: number, // time needed for confirmation in ms
-        tooltip?: Message,
-    }>) {
+    attachStruct(value: ButtonAttachType) {
 
         let frp = this.helper_.getFrp();
         let bound = ButtonWidget.options.bind(frp, value);
@@ -182,14 +184,14 @@ export class ButtonWidget extends Widget implements AttachableWidget {
 
         }, callbackB, this.enabledB_, this.confirmInfoB_);
 
-        this.classesB_ = frp.liftB((cls, enabled)=> {
+        this.classesB_ = frp.liftB((cls:string[], enabled:BoolWithExplanation): string[]=> {
             let res = [];
             if (!enabled.val()) {
                 res.push('recoil-button-disabled');
             }
             res = res.concat(cls);
             return res;
-        }, bound.classes(), this.enabledB_);
+        }, bound.classes() as Behaviour<string[]>, this.enabledB_);
 
         this.textB_ = bound.text();
         this.helper_.attach(this.textB_ as Behaviour<string|Message>, this.callbackB_, this.enabledB_, this.classesB_, this.confirmInfoB_, this.cssBaseB_);

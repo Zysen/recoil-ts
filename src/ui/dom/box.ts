@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Coordinate} from "./coordinate";
+import {Coordinate} from "./coordinate.ts";
 
 export class Box {
     left: number;

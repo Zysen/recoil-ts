@@ -19,9 +19,9 @@
  */
 
 
-import {Coordinate} from "../dom/coordinate";
-import {Box} from "../dom/box";
-import {Size} from "../dom/size";
+import {Coordinate} from "../dom/coordinate.ts";
+import {Box} from "../dom/box.ts";
+import {Size} from "../dom/size.ts";
 import {
     getBounds,
     getComputedPosition,
@@ -30,9 +30,9 @@ import {
     getSize,
     getVisibleRectForElement, isRightToLeft, setBorderBoxSize,
     setPosition, translateRectForAnotherFrame
-} from "../dom/dom";
-import {TagName} from "../dom/tags";
-import {Rect} from "../dom/rect";
+} from "../dom/dom.ts";
+import {TagName} from "../dom/tags.ts";
+import {Rect} from "../dom/rect.ts";
 
 /**
  * Enum for bits in the {@see Corner} bitmap.

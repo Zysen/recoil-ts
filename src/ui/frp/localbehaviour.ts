@@ -5,9 +5,11 @@ import {Util} from "../../frp/util.ts";
 
 export class LocalBehaviour {
     static items_  :{[index:string]:any} = {};
-    private static readonly def_ = new Object;
+    public static readonly DEF = Symbol("def");
 
-    static create<T>(frp:Frp, version:string, key:string, defValB:T|Object, storage:Storage,  opt_serializer?:Serializer): Behaviour<T> {
+    static create<T>(frp:Frp, version:string, key:string, defValB:Symbol, storage:Storage,  opt_serializer?:Serializer): Behaviour<T|Symbol>;
+    static create<T>(frp:Frp, version:string, key:string, defValB:T|Behaviour<T>, storage:Storage,  opt_serializer?:Serializer): Behaviour<T>;
+    static create<T>(frp:Frp, version:string, key:string, defValB:T|Symbol|Behaviour<T>, storage:Storage,  opt_serializer?:Serializer): Behaviour<T|Symbol> {
         let k = 'recoil-ts.ui.frp.store' + version + ':' + key;
         let res = LocalBehaviour.items_[k];
         let util = new Util(frp);
@@ -19,7 +21,7 @@ export class LocalBehaviour {
         }
         let storeB = frp.createB<string|null>(null);
         res = frp.liftBI(
-            (store:T, defVal:T):T => {
+            (store:string|null, defVal:T):T => {
             if (storage.hasOwnProperty(k)) {
                 try {
                     return serializer.deserialize(storage[k]);
@@ -49,15 +51,15 @@ export class LocalBehaviour {
      * @param opt_serializer
      * @return
      */
-    static createSessionLocal<T>(frp:Frp, version:string, key:string, defVal:T, opt_serializer:Serializer): Behaviour<T> {
-        let def = LocalBehaviour.def_;
+    static createSessionLocal<T>(frp:Frp, version:string, key:string, defVal:T, opt_serializer?:Serializer): Behaviour<T> {
+        let def = LocalBehaviour.DEF;
         let sessionB = LocalBehaviour.create<T>(frp, version, 'session.' + key, def, sessionStorage, opt_serializer);
         let localB = LocalBehaviour.create<T>(frp, version, 'local.' + key, def, localStorage, opt_serializer);
 
 
-        return frp.liftBI(function(l, s):T {
-            let val = s === def ? l : s;
-            return val === def ? defVal : val;
+        return frp.liftBI((l:Symbol|T, s:Symbol|T):T => {
+            let val = (s instanceof Symbol && s === def) ? l : s;
+            return val === def ? defVal : val as T;
         }, (v) => {
             localB.set(v);
             sessionB.set(v);

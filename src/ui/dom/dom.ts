@@ -18,21 +18,22 @@
  * quirks mode.
  */
 
-import {TagName, type TagTypeLookup} from "./tags";
-import {NodeType} from "./nodetype";
-import {type StructType} from "../../frp/struct";
-import {isArray, isObject, isString, isStringOrMessage, typeOf} from "../../util/goog";
-import classlist, {contains as containsClass} from "./classlist";
-import {userAgent} from "./useragent";
-import {Size} from "./size";
-import {Coordinate} from "./coordinate";
-import {canonicalizeNewlines, htmlEscape, toCamelCase, toTitleCase, Unicode} from "../../util/string";
-import {assert} from "../../util/goog";
-import {Box} from "./box";
-import {Rect} from "./rect";
-import {Behaviour} from "../../frp/frp";
+import {TagName, type TagTypeLookup} from "./tags.ts";
+import {NodeType} from "./nodetype.ts";
+import {type StructType} from "../../frp/struct.ts";
+import {isArray, isObject, isString, isStringOrMessage, typeOf} from "../../util/goog.ts";
+import classlist, {contains as containsClass} from "./classlist.ts";
+import {userAgent} from "./useragent.ts";
+import {Size} from "./size.ts";
+import {Coordinate} from "./coordinate.ts";
+import {canonicalizeNewlines, htmlEscape, toCamelCase, toTitleCase, Unicode} from "../../util/string.ts";
+import {assert} from "../../util/goog.ts";
+import {Box} from "./box.ts";
+import {Rect} from "./rect.ts";
+import {Behaviour} from "../../frp/frp.ts";
 import {toRecord} from "../../util/object.ts";
 import {Message} from "../message.ts";
+
 /**
  * Gets the DomHelper object for the document where the element resides.
  * @param opt_element If present, gets the DomHelper for this
@@ -99,7 +100,7 @@ function getElementHelper_(doc: Document, element: string | Element): Element | 
  * @param id Element ID.
  * @return The element with the given ID, if it exists.
  */
-export function     getRequiredElement(id: string | Element): Element {
+export function getRequiredElement(id: string | Element): Element {
     if (id instanceof Element) {
         return id;
     }
@@ -549,8 +550,7 @@ export function setProperties(element: Element, properties: StructType) {
         if (key == 'style') {
             if (val instanceof Object) {
                 setStyle(element as HTMLElement, val);
-            }
-            else {
+            } else {
                 (element as any).style.cssText = val;
             }
         } else if (key == 'class') {
@@ -710,7 +710,7 @@ function getWindow_(doc: Document): Window {
  *     its elements will be added as childNodes instead.
  * @return Reference to a DOM node.
  */
-export function createDom<T extends string>(tagName: T, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList | Message)[]):  TagTypeLookup<T> {
+export function createDom<T extends string>(tagName: T, opt_attributes?: (Object | string[] | string | null), ...var_args: (Object | string | any[] | null | NodeList | Message)[]): TagTypeLookup<T> {
     return createDom_(document, ...[tagName, opt_attributes, ...var_args]) as any;
 }
 
@@ -720,7 +720,7 @@ export function createDom<T extends string>(tagName: T, opt_attributes?: (Object
  * @param prop
  * @param v
  */
-export function setAtrribute(el:Element, prop:string, v:any) {
+export function setAtrribute(el: Element, prop: string, v: any) {
     if (v == null) {
         if (el.hasAttribute(prop)) {
             el.removeAttribute(prop);
@@ -731,6 +731,7 @@ export function setAtrribute(el:Element, prop:string, v:any) {
         }
     }
 }
+
 /**
  * Helper for {@code createDom}.
  * @param doc The document to create the DOM in.
@@ -1050,7 +1051,7 @@ export function removeChildren(node: Node) {
  * @param newNode Node to insert.
  * @param refNode Reference node to insert before.
  */
-export function insertSiblingBefore(newNode: Node, refNode: Node) {
+export function insertSiblingBefore(newNode: Node, refNode: Node|null) {
     if ((refNode as any).parentNode) {
         (refNode as any).parentNode?.insertBefore(newNode, refNode);
     }
@@ -1091,7 +1092,7 @@ export function insertChildAt(parent: Element, child: Node, index: number) {
  * @param node The node to remove.
  * @return The node removed if removed; else, null.
  */
-export function removeNode(node: Node | Element): Node | null {
+export function removeNode(node: Node | Element|null): Node | null {
 
     return node && (node as Element).parentNode ? ((node as Element).parentNode as Element).removeChild(node as Node) as Node : null;
 }
@@ -1312,7 +1313,7 @@ export function getParentElement(element: Element): Element | null {
  * @param descendant The node to test presence of.
  * @return Whether the parent node contains the descendent node.
  */
-export function contains(parent: Node | null | undefined, descendant: Node | EventTarget| null | undefined): boolean {
+export function contains(parent: Node | null | undefined, descendant: Node | EventTarget | null | undefined): boolean {
     if (!parent || !descendant) {
         return false;
     }
@@ -1320,7 +1321,7 @@ export function contains(parent: Node | null | undefined, descendant: Node | Eve
     // that way.
 
     // IE DOM
-    if (parent.contains &&  'nodeType' in descendant && descendant.nodeType == NodeType.ELEMENT) {
+    if (parent.contains && 'nodeType' in descendant && descendant.nodeType == NodeType.ELEMENT) {
         return parent == descendant || parent.contains(descendant);
     }
 
@@ -1638,7 +1639,7 @@ export function findNode(root: Node, p: (v: Node) => boolean): Node | undefined 
  * @param p The filter function.
  * @return The found nodes or an empty array if none are found.
  */
-export function findNodes(root: Node, p: (node: Node) => boolean) :Node[]{
+export function findNodes(root: Node, p: (node: Node) => boolean): Node[] {
     let rv: Node[] = [];
     findNodes_(root, p, rv, false);
     return rv;
@@ -1709,7 +1710,7 @@ const PREDEFINED_TAG_VALUES_: StructType = {
  * @return Whether the element has a tab index that allows keyboard
  *     focus.
  */
-export function isFocusableTabIndex(element: Element):boolean {
+export function isFocusableTabIndex(element: Element): boolean {
     return hasSpecifiedTabIndex_(element) &&
         isTabIndexFocusable_(element);
 }
@@ -1745,7 +1746,7 @@ export function setFocusableTabIndex(element: Element, enable: boolean) {
  * @param element Element to check.
  * @return Whether the element allows keyboard focus.
  */
-export function isFocusable(element: Element):boolean {
+export function isFocusable(element: Element): boolean {
     let focusable;
     // Some elements can have unspecified tab index and still receive focus.
     if (nativelySupportsFocus_(element)) {
@@ -1771,7 +1772,7 @@ export function isFocusable(element: Element):boolean {
  * @return Whether the element has a specified tab index.
  * @private
  */
-function hasSpecifiedTabIndex_(element: Element):boolean {
+function hasSpecifiedTabIndex_(element: Element): boolean {
     // IE returns 0 for an unset tabIndex, so we must use getAttributeNode(),
     // which returns an object with a 'specified' property if tabIndex is
     // specified.  This works on other browsers, too.
@@ -1786,7 +1787,7 @@ function hasSpecifiedTabIndex_(element: Element):boolean {
  * @return Whether the element's tab index allows focus.
  * @private
  */
-function isTabIndexFocusable_(element: Element):boolean {
+function isTabIndexFocusable_(element: Element): boolean {
     let index = (element as HTMLElement).tabIndex;
     // NOTE: IE9 puts tabIndex in 16-bit int, e.g. -2 is 65534.
     return typeof index === 'number' && index >= 0 && index < 32768;
@@ -2817,8 +2818,8 @@ export class DomHelper {
      *     NodeList, its elements will be added as childNodes instead.
      * @return Reference to a DOM node.
      */
-    createDom(
-        tagName: string, opt_attributes?: StructType | string, ...var_args: Appendable[]): Element {
+    createDom<T extends string>(
+        tagName: T, opt_attributes?: StructType | string, ...var_args: Appendable[]): TagTypeLookup<T> {
         return createDom_(this.document_, tagName, opt_attributes, ...var_args);
     }
 
@@ -3340,17 +3341,17 @@ export function getViewportPageOffset(doc: Document): Coordinate {
     return new Coordinate(scrollLeft, scrollTop);
 }
 
-export function getCssName(base:string|undefined|Behaviour<string>, name:string) {
+export function getCssName(base: string | undefined | Behaviour<string>, name: string) {
     if (base == undefined) {
         return 'recoil-' + base;
     }
     if (typeof base === 'string') {
         return base + name;
     }
-    return  base.good() ? base.get() + name: 'recoil-' + name ;
+    return base.good() ? base.get() + name : 'recoil-' + name;
 }
 
-let styleNameCache_:Record<string, string> = {};
+let styleNameCache_: Record<string, string> = {};
 
 /**
  * Returns the JS vendor prefix used in CSS properties. Different vendors
@@ -3380,7 +3381,7 @@ export function getVendorJsPrefix() {
  * @param style Style name.
  * @return Vendor-specific style.
  */
-function getVendorJsStyleName_(element:HTMLElement, style:string):string {
+function getVendorJsStyleName_(element: HTMLElement, style: string): string {
     let propertyName = styleNameCache_[style];
     if (!propertyName) {
         let camelStyle = toCamelCase(style);
@@ -3400,13 +3401,14 @@ function getVendorJsStyleName_(element:HTMLElement, style:string):string {
     return propertyName;
 }
 
-function setStyle_(element:HTMLElement, value:string|null|boolean|undefined, style:string) {
+function setStyle_(element: HTMLElement, value: string | null | boolean | undefined, style: string) {
     let propertyName = getVendorJsStyleName_(element, style);
 
     if (propertyName) {
         element.style[propertyName as any] = value as any;
     }
 }
+
 /**
  * Sets a style value on an element.
  *
@@ -3423,11 +3425,11 @@ function setStyle_(element:HTMLElement, value:string|null|boolean|undefined, sty
  * @param opt_value If style was a string, then this
  *     should be the value.
  */
-export function setStyle(element:HTMLElement, style:StructType):void;
-export function setStyle(element:HTMLElement, style:string, opt_value:string|number|boolean):void;
-export function setStyle(element:HTMLElement, style:StructType|string, opt_value?:string|number|boolean):void {
+export function setStyle(element: HTMLElement, style: StructType): void;
+export function setStyle(element: HTMLElement, style: string, opt_value: string | number | boolean): void;
+export function setStyle(element: HTMLElement, style: StructType | string, opt_value?: string | number | boolean): void {
     if (typeof style === "string") {
-        setStyle_(element, opt_value as string|null|boolean, style);
+        setStyle_(element, opt_value as string | null | boolean, style);
     } else {
         for (let key in style) {
             setStyle_(element, style[key], key);
@@ -3449,9 +3451,9 @@ export function setStyle(element:HTMLElement, style:StructType|string, opt_value
  * @param  opt_h Height of the element. Required if w is not a
  *     size object.
  */
-export function setSize (element:HTMLElement, w:Size): void;
-export function setSize (element:HTMLElement, w:string|number, opt_h:string|number):void;
-export function setSize (element:HTMLElement, w:string|number|Size, opt_h?:string|number):void {
+export function setSize(element: HTMLElement, w: Size): void;
+export function setSize(element: HTMLElement, w: string | number, opt_h: string | number): void;
+export function setSize(element: HTMLElement, w: string | number | Size, opt_h?: string | number): void {
     let h;
     if (w instanceof Size) {
         h = w.height;
@@ -3473,7 +3475,7 @@ export function setSize (element:HTMLElement, w:string|number|Size, opt_h?:strin
  * @param height The height value to set.  If a number, 'px'
  *     will be appended, otherwise the value will be applied directly.
  */
-export function setHeight(element:HTMLElement, height:string|number) {
+export function setHeight(element: HTMLElement, height: string | number) {
     element.style.height = getPixelStyleValue_(height, true);
 }
 
@@ -3484,6 +3486,6 @@ export function setHeight(element:HTMLElement, height:string|number) {
  * @param width The width value to set.  If a number, 'px'
  *     will be appended, otherwise the value will be applied directly.
  */
-export function setWidth(element:HTMLElement, width:string|number) {
+export function setWidth(element: HTMLElement, width: string | number) {
     element.style.width = getPixelStyleValue_(width, true);
 }

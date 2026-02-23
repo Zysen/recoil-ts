@@ -5,17 +5,17 @@
  * you may access the behaviour attached to the helper inside the callback
  *
  */
-import {WidgetScope} from "./widgets/widgetscope";
-import {Behaviour, BehaviourList, BehaviourList1, BStatus, Frp} from "../frp/frp";
-import {append, createDom, createTextNode, removeChildren, removeNode, setProperties} from "./dom/dom";
-import {Messages, Messages as messages} from "./messages";
-import {BoolWithExplanation} from "./booleanwithexplain";
-import {WidgetHelper} from "./widgethelper";
-import {BehaviourOrType, StructBehaviourOrType} from "../frp/struct";
-import {Message} from "./message";
-import {Util} from "../frp/util";
-import {TagName} from "./dom/tags";
-import {CssHelper} from "./csshelper";
+import {WidgetScope} from "./widgets/widgetscope.ts";
+import {Behaviour, BehaviourList} from "../frp/frp.ts";
+import {append, createDom, createTextNode, removeChildren, removeNode, setProperties} from "./dom/dom.ts";
+import {Messages} from "./messages.ts";
+import {BoolWithExplanation} from "./booleanwithexplain.ts";
+import {WidgetHelper} from "./widgethelper.ts";
+import {BehaviourOrType} from "../frp/struct.ts";
+import {Message} from "./message.ts";
+import {Util} from "../frp/util.ts";
+import {TagName} from "./dom/tags.ts";
+import {CssHelper} from "./csshelper.ts";
 import {Tooltip} from "./tooltip.ts";
 
 type BrowserEvent = KeyboardEvent | MouseEvent | SubmitEvent | InputEvent;
@@ -177,7 +177,6 @@ export class EnabledTooltipHelper {
     }
 
     private update_(helper: WidgetHelper) {
-        console.log("updatingenabled")
         let tooltip = null;
         let enabled = false;
         if (!this.enabledB_) {

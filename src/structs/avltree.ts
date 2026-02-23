@@ -41,7 +41,7 @@
  * </pre>
  */
 
-import {clone,compare, registerCompare} from "../util/object.js";
+import {clone,compare, registerCompare} from "../util/object.ts";
 
 
 

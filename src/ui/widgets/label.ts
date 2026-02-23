@@ -6,10 +6,10 @@ import {Widget} from "./widget.ts";
 import {Message} from "../message.ts";
 import {WidgetScope} from "./widgetscope.ts";
 import {Behaviour, ErrorType} from "../../frp/frp.ts";
-import {BoolWithExplanation} from "../booleanwithexplain";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
 import {WidgetHelper} from "../widgethelper.ts";
 import {createDom, createTextNode, removeChildren} from "../dom/dom.ts";
-import {Options, StandardOptionsType} from "../frp/util.ts";
+import {Options} from "../frp/util.ts";
 import {TagName} from "../dom/tags.ts";
 import {AttachType} from "../../frp/struct.ts";
 import {Tooltip} from "../tooltip.ts";
@@ -151,7 +151,7 @@ export class LabelHelper<T = ValueType> {
 }
 
 export class Label<Type> extends Widget {
-    private helper_: WidgetHelper;
+    private readonly helper_: WidgetHelper;
     private valueB_?: Behaviour<Type>;
     private enabledB_?: Behaviour<BoolWithExplanation>;
     private tooltipB_?: Behaviour<Message|Node|string>;
@@ -209,7 +209,7 @@ export class Label<Type> extends Widget {
 
 
 export class LabelWidgetHelper {
-    private scope_: WidgetScope;
+    private readonly scope_: WidgetScope;
 
     constructor(scope: WidgetScope) {
         this.scope_ = scope;

@@ -4,7 +4,7 @@ import {getStandardOptionsGroup, StandardOptions, StandardOptionsBoundType, Stan
 import {AttachType} from "../../frp/struct.ts";
 import {DateWidget} from "./date.ts";
 import {WidgetHelper} from "../widgethelper.ts";
-import {createDom, setAtrribute, setElementShown, setProperties} from "../dom/dom.ts";
+import {createDom, setAtrribute, setElementShown} from "../dom/dom.ts";
 import {Widget} from "./widget.ts";
 import {TagName} from "../dom/tags.ts";
 import {EventHelper} from "../eventhelper.ts";
@@ -19,8 +19,8 @@ export class DateTimeWidget extends Widget {
     private readonly date_: HTMLInputElement;
     private configB_?: Behaviour<{ allowNone: boolean, min: number|null, max: number|null, step: number } & StandardOptionsBoundType>
     private valueB_?: Behaviour<number|null>;
-    private helper_: WidgetHelper;
-    private tooltipHelper_: EnabledTooltipHelper;
+    private readonly helper_: WidgetHelper;
+    private readonly tooltipHelper_: EnabledTooltipHelper;
 
     constructor(scope: WidgetScope) {
         let date = createDom('input', {type: 'datetime-local'});
@@ -135,12 +135,8 @@ export class DateTimeWidget extends Widget {
     private static padNumber(value:number, n: number): string {
         return ('' + value).padStart(n, '0');
     }
-    /**
-     * @private
-     * @param {?number} date
-     * @return {string}
-     */
-    private static convertToInternal_(date:number|null) {
+
+    private static convertToInternal_(date:number|null) :string {
         if (date == undefined) {
             return '';
         }
@@ -152,4 +148,4 @@ export class DateTimeWidget extends Widget {
     }
 }
 
-const DateTimeColumn = makeStructColumn(DateTimeWidget);
+export const DateTimeColumn = makeStructColumn(DateTimeWidget);

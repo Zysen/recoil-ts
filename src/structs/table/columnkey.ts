@@ -1,6 +1,6 @@
-import Sequence from "../../util/sequence";
-import {MutableTableRow, TableRow, WrapInColumnKey} from "./table";
-import { compare } from "../../util/object";
+import Sequence from "../../util/sequence.ts";
+import {MutableTableRow, TableRow, type WrapInColumnKey} from "./table.ts";
+import { compare } from "../../util/object.ts";
 
 export class ColumnKey<Type> {
     private static nextId_ = new Sequence();

@@ -140,6 +140,9 @@ export type TagTypeMap = {
     IFRAME: HTMLIFrameElement,
     STYLE: HTMLStyleElement,
     HEAD: HTMLHeadingElement,
+    TEXTAREA: HTMLTextAreaElement,
+    I: HTMLElement,
+    A: HTMLLinkElement
 }
 type CaseInsensitiveKey<K extends string> = Uppercase<K>;
 

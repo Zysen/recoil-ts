@@ -12,13 +12,6 @@ import {BoolWithExplanation} from "../booleanwithexplain.ts";
 import {Behaviour} from "../../frp/frp.ts";
 import classlist from "../dom/classlist.ts";
 
-/**
- *
- * @template T
- * @param {!recoil.ui.WidgetScope} scope
- * @implements {recoil.ui.Widget}
- * @constructor
- */
 export class TimeWidget extends Widget {
     private readonly time_: HTMLInputElement;
     private readonly readonly_: HTMLDivElement;
@@ -47,7 +40,7 @@ export class TimeWidget extends Widget {
         this.readonly_ = readonly;
 
         this.helper_ = new WidgetHelper(scope, this.getElement(), this, this.updateState_);
-        this.tooltip_ = new EnabledTooltipHelper(scope, this.getElement(), [this.time_, this.readonly_]);
+        this.tooltip_ = new EnabledTooltipHelper(scope, this.getElement(), this.time_, [this.readonly_]);
 
         this.time_.addEventListener(EventType.BLUR, frp.accessTransFunc(() => {
             this.helper_.forceUpdate();

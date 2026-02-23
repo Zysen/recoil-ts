@@ -1,9 +1,9 @@
-import {DomObserver} from "./domobserver";
-import {Behaviour, BehaviourList, BStatus, ErrorType, Frp} from "../frp/frp";
-import {WidgetScope} from "./widgets/widgetscope";
-import * as classlist from "./dom/classlist";
-import {append, createTextNode, removeChildren} from "./dom/dom";
-import {Messages as messages} from "./messages";
+import {DomObserver} from "./domobserver.ts";
+import {Behaviour, BehaviourList, BStatus, ErrorType, Frp} from "../frp/frp.ts";
+import {WidgetScope} from "./widgets/widgetscope.ts";
+import * as classlist from "./dom/classlist.ts";
+import {append, createTextNode, removeChildren} from "./dom/dom.ts";
+import {Messages as messages} from "./messages.ts";
 
 export class WidgetHelper {
 

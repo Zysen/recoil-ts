@@ -11,7 +11,7 @@ export class Util {
         this.frp = frp
     }
 
-    toBehaviour<Type>(val: Behaviour<Type> | Type, opt_default?: Type) {
+    toBehaviour<T, InvType = T, OutType = T, CalcType = T>(val: Behaviour<T,InvType, OutType, CalcType> | T, opt_default?: T) {
         return this.frp.toBehaviour(val, opt_default);
     }
 
@@ -47,6 +47,10 @@ export class Util {
         inv: (v: InvType) => StructType|undefined, struct: {
             [index: string]: any
         }, ...extra: BehaviourList): Behaviour<T, InvType> {
+        let behaviours = this.structToBehaviours(struct).concat(extra);
+        if (behaviours.length == 0) {
+            behaviours.push(this.frp.createB(0))
+        }
         return this.frp.liftBI(() => {
                 return calc(Util.resolveStruct_(struct))
             }, (val: InvType) => {
@@ -61,7 +65,7 @@ export class Util {
                     }
                 }
             }
-            , ...this.structToBehaviours(struct), ...extra);
+            , ...behaviours as BehaviourList1);
     }
 
     /**
@@ -305,11 +309,11 @@ export function dateB(frp: Frp): Behaviour<number> {
 /**
  * this creates a behaviour with a memory, that is every
  * time the behaviour is set the memory behaviour is set to the same value
- * this can be usefull for storing setting that are not sent to the server
+ * this can be useful for storing setting that are not sent to the server
  */
 
 export function memoryB<T>(val: Behaviour<T>, memory: Behaviour<T>): Behaviour<T> {
-    return val.frp().liftBI(
+    return val.frp().liftBI<T,T>(
         (v: T): T => {
             return v;
         },

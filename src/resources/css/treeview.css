@@ -1,0 +1,50 @@
+div.recoil-tree-view {
+    border: 1px solid red;
+}
+
+table.recoil-tree {
+    border-collapse: collapse;
+
+}
+
+.recoil-tree-show-lines td.recoil-tree-line {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path style='fill:none;stroke:rgb(0,0,0);stroke-width:1px' d='M0 12 L24 12'/></svg>");
+}
+.recoil-tree-show-lines td.recoil-tree-line.recoil-tree-show-expand {
+    background-image: none
+}
+
+
+.recoil-tree-show-lines td.recoil-tree-line.recoil-tree-expanded {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='10000' viewBox='0 0 24 10000'><path style='fill:none;stroke:rgb(0,0,0);stroke-width:1px' d='M0 12 L24 12 M12 12 L12 10000'/></svg>");
+}
+.recoil-tree-show-lines td.recoil-tree-line.recoil-tree-expanded.recoil-tree-show-expand {
+    background-image: none
+}
+
+.recoil-tree-show-lines td.recoil-tree-spacer {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='10000' viewBox='0 0 24 10000'><path style='fill:none;stroke:rgb(0,0,0);stroke-width:1px' d='M12 0 L12 10000'/></svg>");
+}
+
+.recoil-tree-show-lines td.recoil-tree-spacer.recoil-tree-spacer-last-spacer {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='10000' viewBox='0 0 24 10000'><path style='fill:none;stroke:rgb(0,0,0);stroke-width:1px' d='M12 0 L12 10000 M12 12 L24 12'/></svg>");
+    background-repeat: no-repeat;
+}
+td.recoil-tree-spacer.recoil-tree-spacer-last-sibling {
+    background: none;
+}
+
+.recoil-tree-show-lines td.recoil-tree-spacer.recoil-tree-spacer-last-sibling.recoil-tree-spacer-last-spacer {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path style='fill:none;stroke:rgb(0,0,0);stroke-width:1px' d='M12 0 L12 12 L24 12'/></svg>");
+    background-repeat: no-repeat;
+}
+
+
+
+tr.recoil-tree-element {
+    margin: 0;
+}
+
+td.recoil-tree-row {
+    text-align: left;
+}

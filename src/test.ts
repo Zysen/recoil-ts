@@ -64,6 +64,15 @@ export function assertObjectEquals(actual:any, expected:any, opt_last?:any) {
     }
 }
 
+export function assertArrayEquals(actual:any[], expected:any[], opt_last?:any) {
+    if (arguments.length === 2) {
+        assert.deepStrictEqual(actual, expected);
+    }
+    else {
+        assert.deepStrictEqual(expected, opt_last);
+    }
+}
+
 export function assertEqualIgnoreOrder(actual:any[], expected:any[]) {
     if (actual.length !== expected.length) {
         assert.fail("sets length not equal");

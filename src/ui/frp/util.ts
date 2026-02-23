@@ -1,8 +1,9 @@
 import {
+    FLATTEN,
     flatten,
     flattenMeta,
     get,
-    getSubset,
+    getSubset, NO_FLATTEN,
     type StructBehaviour,
     type StructBehaviourOrType,
     type StructType
@@ -13,8 +14,9 @@ import * as struct from "../../frp/struct.ts";
 import {Messages} from "../messages.ts";
 import {BoolWithExplanation} from "../booleanwithexplain.ts";
 import {Message} from "../message.ts";
+import {WidgetInterface} from "../widgets/widget.ts";
 
-export interface AttachableWidget {
+export interface AttachableWidget<T extends Element= Element> extends WidgetInterface<T> {
     attachStruct(val: StructBehaviourOrType):void
 }
 
@@ -320,6 +322,10 @@ export function StandardOptions<T extends (string | Record<string, any>)[]>(...o
 export function getStandardOptionsGroup<T, BoundT extends (string | Record<string, any>)[] = any[]>(bound: BoundOptionsType<BoundT>, fields:(string|(() => any))[], opt_lift?:(v:StructType) => T, opt_inv?: (v:T) => StructType):Behaviour<T & {
     enabled:BoolWithExplanation, editable: boolean, tooltip:Message|string}> {
   return bound[getGroup](fields.concat([bound.enabled, bound.tooltip, bound.editable]), opt_lift, opt_inv) as any;
+}
+
+export function getOptionsGroup<T, BoundT extends (string | Record<string, any>)[] = any[]>(bound: BoundOptionsType<BoundT>, fields:(string|(() => any))[], opt_lift?:(v:StructType) => T, opt_inv?: (v:T) => StructType):Behaviour<T> {
+    return bound[getGroup](fields, opt_lift, opt_inv) as any;
 }
 export type StandardOptionsType = {
     editable?: boolean;

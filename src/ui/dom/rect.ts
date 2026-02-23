@@ -1,6 +1,6 @@
-import {Size} from "./size";
-import {Box} from "./box";
-import {Coordinate} from "./coordinate";
+import {Size} from "./size.ts";
+import {Box} from "./box.ts";
+import {Coordinate} from "./coordinate.ts";
 
 export class Rect {
     left:number;

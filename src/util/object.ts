@@ -1,7 +1,17 @@
 import Sequence from "./sequence.ts";
 
+const FUNC_KEY = Symbol('FuncKey');
+export const EQUALS = Symbol('EQUALS');
+
 export function defaultCompare(a:any, b:any): number {
     return a > b ? 1 : a < b ? -1 : 0;
+}
+
+export function firstKey(obj:Record<string, any>):string {
+    for (let key in obj) {
+        return key;
+    }
+    return '';
 }
 
 /**
@@ -22,6 +32,23 @@ export function safeFreeze (value: any) {
 
 }
 
+/**
+ * @param {function(...)} func
+ * @param {?} key
+ * @param {?} data
+ * @return {function(...)} just the function passed in for convience
+ */
+
+export function makeEqualFunc<T extends (...p:any[]) => any> (func:T, key:Symbol, data:any):T {
+    (func as any)[FUNC_KEY] = {key: key, data: data};
+
+    (func as any).equals = (that:any)=> {
+        return that && isEqual(that[FUNC_KEY], (func as any)[FUNC_KEY]);
+    };
+
+    return func;
+
+}
 
 /**
  * calls compare on all arguments, returns the first non-zero result
@@ -328,6 +355,30 @@ export function registerCompare<T>(
         compare: compare
     })
 }
+let nextFunctionId:bigint = 0n;
+let functionIdMap = new WeakMap<any,bigint>();
+
+function compareFunction(a:any, b:any, ignore:Set<string>, aPath:Set<Object>, bPath:Set<Object>):number {
+    if (a === b) {
+        return 0;
+    }
+    let aId = functionIdMap.get(a);
+    let bId = functionIdMap.get(b);
+
+    if (aId === undefined) {
+        aId = nextFunctionId++;
+        functionIdMap.set(a, aId);
+    }
+    if (bId === undefined) {
+        bId = nextFunctionId++;
+        functionIdMap.set(b, bId);
+    }
+
+    return aId === bId ? 0 : (aId < bId ? -1 : 1);
+
+
+}
+
 
 function compareSet(a:Set<any>, b:Set<any>, ignore:Set<string>, aPath:Set<Object>, bPath:Set<Object>):number {
     if (a.size != b.size) {
@@ -344,9 +395,11 @@ function compareSet(a:Set<any>, b:Set<any>, ignore:Set<string>, aPath:Set<Object
 
 }
 
+
 registerCompare(Date,
     (x: Date, y: Date) => x.getTime() - y.getTime(),
     (x :Date, y: Date) => x.getTime() === y.getTime());
+registerCompare(Function, compareFunction);
 registerCompare(Set, compareSet);
 registerCompare(Map, (a: Map<any,any>, b: Map<any,any>, ignore: Set<any>, aPath:Set<any>, bPath:Set<any>): number => {
     if (a.size != b.size) {
@@ -406,9 +459,17 @@ function isEqualRec(a: any, b: any, ignore: Set<string>, aPath:Set<Object>, bPat
 		return false;
     }
 
+    if (a[EQUALS] instanceof Function) {
+        return a[EQUALS](b, ignore, aPath, bPath);
+    }
+    if (b[EQUALS] instanceof Function) {
+        return b[EQUALS](a, ignore, bPath, aPath);
+    }
+
     if (a.equals instanceof Function) {
         return a.equals(b, ignore, aPath, bPath);
     }
+
 
     if (b.equals instanceof Function) {
         return b.equals(a, ignore, bPath, aPath);

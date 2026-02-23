@@ -1,763 +1,497 @@
+import {WidgetHelper} from "../widgethelper.ts";
+import {WidgetScope} from "./widgetscope.ts";
+import {Widget} from "./widget.ts";
+import {
+    createDom,
+    createTextNode,
+    DomHelper, insertChildAt,
+    removeChildren,
+    removeNode,
+} from "../dom/dom.ts";
+import {TagName} from "../dom/tags.ts";
+import {Tree} from "../../structs/tree.ts";
+import {getOptionsGroup, StandardOptions} from "../frp/util.ts";
+import {Behaviour, Frp} from "../../frp/frp.ts";
+import {isEqual} from "../../util/object.ts";
+import {Label} from "./label.ts";
+import {LocalBehaviour} from "../frp/localbehaviour.ts";
+import {AttachType} from "../../frp/struct.ts";
+import {enable} from "../dom/classlist.ts";
+import {EventHelper} from "../eventhelper.ts";
+import {EventType} from "../dom/eventtype.ts";
+import {getValueB} from "../../frp/tree.ts";
 
-/**
- * @param {!recoil.ui.WidgetScope} scope
- * @implements {recoil.ui.Widget}
- * @constructor
- */
-recoil.ui.widgets.TreeView = function(scope) {
-    var me = this;
-    this.scope_ = scope;
-    this.componentDiv_ = goog.dom.createDom('div');
-    this.component_ = recoil.ui.ComponentWidgetHelper.elementToNoFocusControl(this.componentDiv_);
+type SelectInfo<Type> = { path: string[], value: Type };
+
+export enum ExpandState {
+    collapsed, expanded, leaf
+}
+
+export class ExpandInfoExpanded {
+    [index: string]: { expand: boolean, children: ExpandInfoExpanded };
+
+    constructor(toClone?: ExpandInfoExpanded | undefined) {
+        if (toClone) {
+            for (let key in toClone) {
+                this[key] = toClone[key];
+            }
+        }
+    }
+
+}
+
+type ExpandInfo = { internal: boolean | undefined, expanded: ExpandInfoExpanded | boolean };
+
+type ConfigInfo<Type> = {
+    indentWidth: number,
+    showRoot: boolean,
+    showLines: boolean,
+    collapseChildren: boolean, // if you collapse a node collapse all open children as well
+    showRootLines: boolean,
+    oneClickExpand: boolean,
+    labelClickExpand: boolean,
+    isUserCollapsible: boolean,
+    isRightToLeft: boolean,
+    clickCallback?: (e: Event) => void,
+    domHelper: DomHelper,
+    renderer: (scope: WidgetScope, path: string[], treeB: Behaviour<Tree<Type>>) => Element,
+    iconRenderer: (scope: WidgetScope, path: string[], treeB: Behaviour<Tree<Type>>) => Element,
+    expandRenderer: ((scope: WidgetScope, path: string[], treeB: Behaviour<Tree<Type>>, state: ExpandState) => Element) | null,
+    afterLabelRenderer: (scope: WidgetScope, path: string, treeB: Behaviour<Tree<Type>>) => Element,
+}
+
+export class TreeView<Type> extends Widget {
+
+    private oldValue_: Tree<Type> | null;
+    private tree_: TreeNode<Type> | null = null;
+    private treeSet_: boolean = false;
+    private readonly configHelper_: WidgetHelper;
+    private readonly stateHelper_: WidgetHelper;
+    private readonly expandHelper_: WidgetHelper;
+    private readonly selectedB_: Behaviour<SelectInfo<Type>[]>;
+    private readonly treeDiv_: HTMLTableElement;
+    private readonly errorDiv_: HTMLDivElement;
+    private blockExpandEvents_ = false;
+    private expandedB_?: Behaviour<ExpandInfoExpanded | boolean>;
+    private valueB_?: Behaviour<Tree<Type>>;
+    private configB_?: Behaviour<ConfigInfo<Type>>;
+    userToggle?: boolean = false;
+
+    constructor(scope: WidgetScope) {
+        super(scope, createDom(TagName.DIV, {class: 'recoil-tree-view'}));
+        this.treeDiv_ = createDom(TagName.TABLE, {class: 'recoil-tree'});
+        this.errorDiv_ = createDom(TagName.DIV, {class: 'recoil-tree-error'});
+        this.getElement().appendChild(this.treeDiv_);
+        this.getElement().appendChild(this.errorDiv_);
+        this.oldValue_ = null;
+        this.configHelper_ = new WidgetHelper(scope, this.getElement(), this, this.updateConfig_);
+        this.stateHelper_ = new WidgetHelper(scope, this.getElement(), this, this.updateTree_);
+        this.expandHelper_ = new WidgetHelper(scope, this.getElement(), this, this.updateExpand_);
+        this.selectedB_ = scope.getFrp().createB([]);
+    }
+
+    getSelectedB():Behaviour<SelectInfo<Type>[]> {
+        return this.selectedB_;
+    }
+
     /**
-     * @private
-     * @type {goog.ui.tree.TreeControl}
-     *
+     * scrolls the element into view if not on screen
+     * @param {!Element} el
      */
-    this.tree_ = null;
-    /**
-     * @private
-     * @type {recoil.structs.Tree}
-     */
-    this.oldTree_ = null;
-    this.config_ = new recoil.ui.WidgetHelper(scope, this.componentDiv_, this, this.updateConfig_);
-    this.state_ = new recoil.ui.WidgetHelper(scope, this.componentDiv_, this, this.updateTree_);
-    this.expandHelper_ = new recoil.ui.WidgetHelper(scope, this.componentDiv_, this, this.updateExpand_);
-    this.selectedB_ = /** @type {!recoil.frp.Behaviour} **/(scope.getFrp().createB(null));
-};
+    static scrollIfNeeded(el: Element) {
+        let findScrollableParent = function (el: Element): Element | null {
+            let cur: Element | null = el;
+            while (cur) {
+                if (cur.scrollHeight > cur.clientHeight) {
+                    let style = getComputedStyle(cur);
+                    let overflow = style ? style.overflow : '';
+                    if (['auto', 'scroll'].indexOf(overflow) >= 0) {
+                        return cur;
+                    }
+                }
+                cur = cur.parentElement;
+            }
+            return null;
+        };
+        let ancestor = findScrollableParent(el);
+        if (ancestor && (ancestor as any).scrollIntoView) {
+            let bound = el.getBoundingClientRect();
+            let abound = ancestor.getBoundingClientRect();
+            if (bound && abound) {
+                if (abound.bottom < bound.bottom) {
+                    el.scrollIntoView(false);
+                } else if (bound.top < abound.top) {
+                    el.scrollIntoView(true);
 
-/**
- * @return {!recoil.frp.Behaviour}
- */
-recoil.ui.widgets.TreeView.prototype.getSelectedB = function() {
-    return this.selectedB_;
-};
-
-/**
- * @type {!Object}
- */
-recoil.ui.widgets.TreeView.defaultConfig = (function() {
-    var res = goog.object.clone(goog.ui.tree.TreeControl.defaultConfig);
-    res.showRoot = true;
-    res.showLines = true;
-    res.showExpandIcons = true;
-    res.clickCallback = null;
-    return res;
-})();
-/**
- * scrolls the element into view if not on screen
- * @param {!Element} el
- */
-recoil.ui.widgets.TreeView.scrollIfNeeded = function(el) {
-    var findScrollableParent = function(el) {
-        var cur = el;
-        while (cur) {
-            if (cur.scrollHeight > cur.clientHeight) {
-                var style = getComputedStyle(cur);
-                var overflow = style ? style.overflow : undefined;
-                if (['auto', 'scroll'].indexOf(overflow) >= 0) {
-                    return cur;
                 }
             }
-            cur = cur.parentElement;
         }
-        return null;
+    }
+
+    static defaultNodeFactory<Type>(scope: WidgetScope, nodeB: Behaviour<Type>): Label<Type> {
+        let widget = new Label<Type>(scope);
+        widget.attachStruct({value: nodeB});
+        return widget;
+    }
+
+
+    /**
+     * callback handler that gets called when the configuration for the widget
+     * gets changed
+     *
+     */
+    private updateConfig_(helper: WidgetHelper) {
+        let good = helper.isGood();
+        removeChildren(this.treeDiv_);
+        if (good) {
+            const config = this.configB_!.get();
+            enable(this.treeDiv_, "recoil-tree-show-lines", config.showLines);
+
+            this.oldValue_ = null;
+            /* todo            this.tree_.listen(goog.events.EventType.CHANGE, (e)=> {
+                let item = this.tree_.getSelectedItem();
+                let path = [];
+                let cur = item;
+
+                while (cur && cur.key_) {
+                    path.unshift(cur.key_);
+                    cur = cur.getParent();
+                }
+                if (this.oldValue_) {
+                    this.scope_.getFrp().accessTrans(
+                         () => {
+                            if (item) {
+                                this.selectedB_.set([{path: path, value: this.oldValue_.getValue(path)}]);
+                            } else {
+                                this.selectedB_.set([]);
+                            }
+                        }, this.selectedB_);
+                }
+
+            }, false, this);*/
+
+            // now force the tree to re-render since we just destroyed
+            // todo this.treeEl_.setShowRootNode(treeConfig.showRoot === undefined || treeConfig.showRoot);
+            // todo this.treeEl_.setShowLines(treeConfig.showLines === undefined || treeConfig.showLines);
+//            this.tree_.setShowExpandIcons(treeConfig.showExpandIcons === undefined || treeConfig.showExpandIcons);
+            // and created a new one
+            this.stateHelper_.forceUpdate();
+        } else {
+            this.stateHelper_.forceUpdate();
+        }
+
     };
-    var ancestor = findScrollableParent(el);
-    if (ancestor && ancestor.scrollIntoView) {
-        var bound = el.getBoundingClientRect();
-        var abound = ancestor.getBoundingClientRect();
-        if (bound && abound) {
-            if (abound.bottom < bound.bottom) {
-                el.scrollIntoView(false);
-            }
-            else if (bound.top < abound.top) {
-                el.scrollIntoView(true);
 
-            }
+    /**
+     * @private
+     */
+    private clearErrors_() {
+        removeChildren(this.errorDiv_);
+    }
+
+    private addErrors_(helper: WidgetHelper) {
+        for (let error of helper.errors()) {
+            let div = createDom('div', {class: 'recoil-error'}, createTextNode(error.toString()));
+            div.onclick = function () {
+                console.error('Error was', error);
+            };
+            this.errorDiv_.appendChild(div);
+
         }
     }
-};
 
-/**
- * This creates a TreeControl object. A tree control provides a way to
- * view a hierarchical set of data.
- * @param {string} key
- * @param {string|!goog.html.SafeHtml} content The content of the node label.
- *     Strings are treated as plain-text and will be HTML escaped.
- * @param {Object=} opt_config The configuration for the tree. See
- *    goog.ui.tree.TreeControl.defaultConfig. If not specified, a default config
- *    will be used.
- * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper.
- * @constructor
- * @extends {goog.ui.tree.TreeNode}
- */
-
-recoil.ui.widgets.TreeNode = function(key, content, opt_config, opt_domHelper) {
-    goog.ui.tree.TreeNode.call(this, content, opt_config, opt_domHelper);
-    this.key_ = key;
-};
-goog.inherits(recoil.ui.widgets.TreeNode, goog.ui.tree.TreeNode);
-
-
-/**
- * Selects the node.
- */
-recoil.ui.widgets.TreeNode.prototype.select = function() {
-    recoil.ui.widgets.TreeNode.superClass_.select.call(this);
-};
-
-/**
- * Handles a key down event.
- * @param {!goog.events.BrowserEvent} e The browser event.
- * @return {boolean} The handled value.
- * @protected
- */
-recoil.ui.widgets.TreeNode.prototype.onKeyDown = function(e) {
-
-    var handled = recoil.ui.widgets.TreeNode.superClass_.onKeyDown.call(this, e);
-    if (handled && this.getTree().getSelectedItem()) {
-        var selected = this.getTree().getSelectedItem();
-        if (selected) {
-            var el = selected.getRowElement();
-            if (el) {
-                recoil.ui.widgets.TreeView.scrollIfNeeded(el);
-            }
-        }
-    }
-    return handled;
-};
-/**
- * Handles a click event.
- * @param {!goog.events.BrowserEvent} e The browser event.
- * @protected
- * @suppress {underscore|visibility}
- */
-recoil.ui.widgets.TreeNode.prototype.onClick_ = function(e) {
-    var el = e.target;
-    // expand icon
-
-    if (this.getConfig().clickCallback && this.getConfig().clickCallback(this, e)) {
-        return;
-    }
-    var type = el.getAttribute('type');
-    if (type == 'expand' && this.hasChildren()) {
-        e.preventDefault();
-        return;
-    }
-
-
-    if (this.getConfig().oneClickExpand && this.isUserCollapsible()) {
-        if (!this.hasChildren() && e.button === 0) {
+    /**
+     * updates the expanded behaviour from the tree
+     */
+    private updateExpanded_() {
+        let expandedB = this.expandedB_;
+        if (!this.tree_ || !expandedB) {
             return;
         }
 
-        try {
-            this.getTree().userToggle = true;
-            this.toggle();
-        }
-        catch (e) {
-            delete this.getTree().userToggle;
-        }
-    }
-    e.preventDefault();
-};
-/**
- * @return {string}
- */
-recoil.ui.widgets.TreeNode.prototype.key = function() {
-    return this.key_;
-};
 
-/**
- * @return {!Array<string>}
- */
-recoil.ui.widgets.TreeNode.prototype.path = function() {
-    var res = [this.key_];
-
-    var parent = this.getParent();
-    while (parent instanceof recoil.ui.widgets.TreeNode) {
-        res.unshift(parent.key());
-        parent = parent.getParent();
-    }
-    return res;
-};
-
-/** @override */
-recoil.ui.widgets.TreeNode.prototype.createDom = function() {
-    var element = this.toDom();
-    this.setElementInternal(element);
-};
-
-
-/**
- * Creates HTML for the node.
- * @return {!Element}
- * @protected
- */
-recoil.ui.widgets.TreeNode.prototype.toDom = function() {
-    var tree = this.getTree();
-    var hideLines = !tree.getShowLines() ||
-            tree == this.getParent() && !tree.getShowRootLines();
-    var config = this.getConfig();
-    var childClass =
-            hideLines ? config.cssChildrenNoLines : config.cssChildren;
-
-    var nonEmptyAndExpanded = this.getExpanded() && this.hasChildren();
-
-    var attributes = {'class': childClass, 'style': goog.html.SafeStyle.unwrap(this.getLineStyle())};
-
-    var content = [];
-    if (nonEmptyAndExpanded) {
-        // children
-        this.forEachChild(function(child) { content.push(child.toDom()); });
-    }
-
-    var children = this.getDomHelper().createDom('div', attributes, content);
-
-    return this.getDomHelper().createDom(
-        'div', {'class': config.cssItem, 'id': this.getId()},
-        [this.getRowDom(), children]);
-};
-
-/**
- * Sets the node to be expanded.
- * @param {boolean} expanded Whether to expand or close the node.
- * @suppress {visibility}
- */
-recoil.ui.widgets.TreeNode.prototype.setExpanded = function(expanded) {
-    var isStateChange = expanded != this.getExpanded();
-    if (isStateChange) {
-        // Only fire events if the expanded state has actually changed.
-        var prevented = !this.dispatchEvent(
-            expanded ? goog.ui.tree.BaseNode.EventType.BEFORE_EXPAND :
-                goog.ui.tree.BaseNode.EventType.BEFORE_COLLAPSE);
-        if (prevented) return;
-    }
-    var ce;
-    this.setExpandedInternal(expanded);
-    var tree = this.getTree();
-    var expandOverride = tree.userToggle && this.getConfig().expandOverride;
-    var el = this.getElement();
-
-    if (this.hasChildren()) {
-        if (!expanded && tree && this.contains(tree.getSelectedItem())) {
-            this.select();
-        }
-
-        if (el) {
-            ce = this.getChildrenElement();
-            if (ce) {
-
-                if (!expandOverride) {goog.style.setElementShown(ce, expanded);}
-                // Make sure we have the HTML for the children here.
-                if (expanded && this.isInDocument() && !ce.hasChildNodes()) {
-                    var children = [];
-                    this.getDomHelper().removeChildren(ce);
-                    this.forEachChild(function(child) {
-                        var childEl = child.toDom();
-                        children.push(childEl);
-                        ce.appendChild(childEl);
-                    });
-
-                    this.forEachChild(function(child) { child.enterDocument(); });
-                }
-                if (expandOverride) {
-                    expandOverride(ce, expanded);
+        let getExpandedRec = function (node: TreeNode<Type>,
+                                       expandedSet: ExpandInfoExpanded) {
+            for (let child of node.getChildren()) {
+                if (child.getExpanded() && child.hasChildren()) {
+                    let childExpanded = new ExpandInfoExpanded();
+                    getExpandedRec(child, childExpanded);
+                    childExpanded[child.key()] = {expand: true, children: childExpanded};
                 }
             }
-            this.updateExpandIcon();
-        }
-    } else {
-        ce = this.getChildrenElement();
-        if (ce) {
-            goog.style.setElementShown(ce, false);
-        }
-    }
-    if (el) {
-        this.updateIcon_();
-        goog.a11y.aria.setState(el, 'expanded', expanded);
-    }
-
-    if (isStateChange) {
-        this.dispatchEvent(
-            expanded ? goog.ui.tree.BaseNode.EventType.EXPAND :
-                goog.ui.tree.BaseNode.EventType.COLLAPSE);
-    }
-};
-/**
- * @param {goog.ui.Component} component
- */
-recoil.ui.widgets.TreeNode.prototype.setDom = function(component) {
-    this.component_ = component;
-    var el = this.getLabelElement();
-    if (el) {
-        this.getDomHelper().removeChildren(el);
-        component.render(el);
-
-    }
-    var tree = this.getTree();
-    if (tree) {
-        // Tell the tree control about the updated label text.
-        tree.setNode(this);
-    }
-};
-/**
- * @return {!Element} The html for the row.
- * @protected
- * @suppress {visibility}
- */
-recoil.ui.widgets.TreeNode.prototype.getRowDom = function() {
-    var style = {};
-    style['padding-' + (this.isRightToLeft() ? 'right' : 'left')] =
-        this.getPixelIndent_() + 'px';
-    var attributes = {'class': this.getRowClassName(), 'style': goog.html.SafeStyle.unwrap(goog.html.SafeStyle.create(style))};
-    var dh = this.getDomHelper();
-    var content = [
-        dh.safeHtmlToNode(this.getExpandIconSafeHtml()), dh.safeHtmlToNode(this.getIconSafeHtml()),
-        this.getLabelDom(),
-        dh.safeHtmlToNode(goog.html.SafeHtml.create('span', {}, this.getAfterLabelSafeHtml()))
-    ];
-    return this.getDomHelper().createDom('div', attributes, content);
-};
-
-/**
- * fixes bug where the folder icon is not updated
- * @override
- * @suppress {visibility}
- */
-recoil.ui.widgets.TreeNode.prototype.addChildAt = function(
-    child, index, opt_render) {
-    var hadChildren = this.hasChildren();
-    recoil.ui.widgets.TreeNode.superClass_.addChildAt.call(this, child, index);
-    if (!hadChildren && this.getIconElement()) {
-        this.updateIcon_();
-    }
-};
-/**
- * @return {!Element}
- */
-recoil.ui.widgets.TreeNode.prototype.getLabelDom = function() {
-    var el;
-
-    var res = this.getDomHelper().createDom(
-        'span',
-        {'class': this.getConfig().cssItemLabel || null});
-    if (this.component_) {
-        el = this.component_.getElement();
-        if (el) {
-            this.getDomHelper().removeNode(el);
-            res.appendChild(el);
-        }
-        else {
-            this.component_.render(el);
-        }
-
-    }
-    else {
-        res.appendChild(this.getDomHelper().safeHtmlToNode(this.getSafeHtml()));
-    }
-    return res;
-};
-
-/**
- * @param {!recoil.ui.WidgetScope} scope
- * @param {!recoil.frp.Behaviour} nodeB
- * @return {recoil.ui.Widget}
- */
-recoil.ui.widgets.TreeView.defaultNodeFactory = function(scope, nodeB) {
-    var widget = new recoil.ui.widgets.LabelWidget(scope);
-    widget.attach(nodeB);
-    return widget;
-};
-/**
- * callback handler that gets called when the configuration for the widget
- * gets changed
- *
- * @private
- * @param {!recoil.ui.WidgetHelper} helper
- */
-recoil.ui.widgets.TreeView.prototype.updateConfig_ = function(helper) {
-    var me = this;
-    var good = helper.isGood();
-
-    if (good) {
-        if (me.tree_ !== null) {
-            goog.dom.removeChildren(this.componentDiv_);
-        }
-        var treeConfig = helper.value();
-        me.oldValue_ = undefined;
-        me.tree_ = new goog.ui.tree.TreeControl('root', treeConfig);
-        me.tree_.listen(goog.events.EventType.CHANGE, function(e) {
-            var item = me.tree_.getSelectedItem();
-            var path = [];
-            var cur = item;
-
-            while (cur && cur.key_) {
-                path.unshift(cur.key_);
-                cur = cur.getParent();
-            }
-            if (me.oldValue_) {
-                this.scope_.getFrp().accessTrans(
-                    function() {
-                        if (item) {
-                            me.selectedB_.set({path: path, value: me.oldValue_.getValue(path)});
-                        }
-                        else {
-                            me.selectedB_.set(null);
-                        }
-                    }, me.selectedB_);
-            }
-
-        }, false, this);
-
-        // now force the tree to re-render since we just destroyed
-        me.tree_.setShowRootNode(treeConfig.showRoot === undefined || treeConfig.showRoot);
-        me.tree_.setShowLines(treeConfig.showLines === undefined || treeConfig.showLines);
-        me.tree_.setShowExpandIcons(treeConfig.showExpandIcons === undefined || treeConfig.showExpandIcons);
-        me.tree_.render(me.componentDiv_);
-        me.nodeFactory_ = treeConfig.nodeFactory_ || treeConfig.nodeFactory || recoil.ui.widgets.TreeView.defaultNodeFactory;
-        // and created a new one
-        me.state_.forceUpdate();
-    } else if (me.tree_ !== null) {
-        goog.dom.removeChildren(this.componentDiv_);
-        me.tree_ = null;
-        me.state_.forceUpdate();
-    }
-
-};
-/**
- * @private
- */
-recoil.ui.widgets.TreeView.prototype.clearErrors_ = function() {
-    var children = goog.dom.getChildren(this.componentDiv_);
-    //backwards because we may delete
-    for (var i = children.length - 1; i >= 0; i--) {
-        var child = children[i];
-        if (goog.dom.classlist.contains(child, 'error')) {
-            this.componentDiv_.removeChild(child);
-        }
-    }
-
-};
-
-/**
- * @private
- * @param {recoil.ui.WidgetHelper} helper
- */
-recoil.ui.widgets.TreeView.prototype.addErrors_ = function(helper) {
-    var me = this;
-    helper.errors().forEach(function(error) {
-        var div = goog.dom.createDom('div', {class: 'error'}, goog.dom.createTextNode(error.toString()));
-        div.onclick = function() {
-            console.error('Error was', error);
         };
-        me.componentDiv_.appendChild(
-            div);
-
-    });
-};
-/**
- * @private
- * updates the expanded behaviour from the tree
- */
-recoil.ui.widgets.TreeView.prototype.updateExpanded_ = function() {
-    var me = this;
-    var expandedB = this.expandedB_;
-    if (!this.tree_) {
-        return;
-    }
-
-    var getExpandedRec = function(node, expandedSet) {
-        node.forEachChild(function(child) {
-            if (child.getExpanded() && child.hasChildren()) {
-                var childExpanded = {};
-                getExpandedRec(child, childExpanded);
-                expandedSet[child.key()] = childExpanded;
-            }
-        });
+        const tree = this.tree_;
+        this.scope_.getFrp().accessTrans(
+            () => {
+                let expanded = {};
+                getExpandedRec(tree, expanded);
+                expandedB.set(expanded);
+            }, expandedB);
     };
-    this.scope_.getFrp().accessTrans(
-        function() {
-            var expanded = {};
-            getExpandedRec(me.tree_, expanded);
-            expandedB.set({internal: true, expanded: expanded});
-        }, expandedB);
-};
 
-/**
- * @private
- * @param {recoil.ui.WidgetHelper} helper
- * @param {!recoil.frp.Behaviour<{expanded:(Object|boolean),internal:(undefined|boolean)}>} newValueB
- */
-recoil.ui.widgets.TreeView.prototype.updateExpand_ = function(helper, newValueB) {
-    if (!helper.isGood() || newValueB.get().internal) {
-        return;
-    }
-    var setExpandedRec = function(node, expanded) {
-        node.setExpanded(expanded);
-
-    };
-    if (this.tree_ && this.treeSet_) {
-        var newValue = newValueB.get();
-        try {
-            this.blockExpandEvents_ = true;
-            if (newValue.expanded === true || newValue.expanded === false) {
-                if (newValue.expanded) {
-                    this.tree_.expandAll();
-                }
-                else {
-                    this.tree_.collapseAll();
-                }
-            }
-            else {
-                var expandRec = function(node, expandSet) {
-                    node.forEachChild(function(child) {
-                        if (child.hasChildren()) {
-                            child.setExpanded(!!(expandSet && expandSet[child.key()]));
-                            if (expandSet) {
-                                expandRec(child, expandSet[child.key()]);
-                            }
-                            else {
-                                expandRec(child, undefined);
-                            }
-                        }
-                        else {
-                            child.setExpanded(false);
-                        }
-                    });
-                };
-                expandRec(this.tree_, newValue.expanded);
-            }
-            this.updateExpanded_();
-        }
-        finally {
-            this.blockExpandEvents_ = false;
+    private updateExpand_(helper: WidgetHelper, newValueB: Behaviour<ExpandInfo>) {
+        if (!helper.isGood() || newValueB.get().internal) {
+            return;
         }
 
-    }
-};
-/**
- * @private
- * @param {recoil.ui.WidgetHelper} helper
- * @param {!recoil.frp.Behaviour<recoil.structs.Tree>} newValue
- */
-recoil.ui.widgets.TreeView.prototype.updateTree_ = function(helper, newValue) {
-    var good = helper.isGood();
+        if (this.tree_ && this.treeSet_) {
+            let newValue = newValueB.get();
+            try {
+                this.blockExpandEvents_ = true;
+                if (newValue.expanded === true || newValue.expanded === false) {
+                    /* todo                if (newValue.expanded) {
+                                        this.tree_.expandAll();
+                                    } else {
+                                        this.tree_.collapseAll();
+                                    }*/
+                } else {
+                    let expandRec = (node: TreeNode<Type>, expandSet: ExpandInfoExpanded | undefined) => {
+                        for (let child of node.getChildren()) {
+                            if (child.hasChildren()) {
+                                child.setExpanded(!!(expandSet && expandSet[child.key()]));
+                                if (expandSet) {
+                                    expandRec(child, expandSet[child.key()].children);
+                                } else {
+                                    expandRec(child, undefined);
+                                }
+                            } else {
+                                child.setExpanded(false);
+                            }
+                        }
+                    };
+                    expandRec(this.tree_, newValue.expanded);
+                }
+                this.updateExpanded_();
+            } finally {
+                this.blockExpandEvents_ = false;
+            }
 
-    // clear out errors
-    var me = this;
-    this.clearErrors_();
-    this.treeSet_ = false;
-    if (this.tree_ !== null) {
+        }
+    }
+
+    /**
+     * @private
+     * @param {recoil.ui.WidgetHelper} helper
+     * @param {!recoil.frp.Behaviour<recoil.structs.Tree>} newValue
+     */
+    private updateTree_(helper: WidgetHelper, newValue: Behaviour<Tree<Type>>) {
+        let good = helper.isGood();
+        // clear out errors
+        this.clearErrors_();
         if (good) {
-            this.populateTreeRec_(null, this.tree_, [], this.oldValue_, newValue.get());
-            this.treeSet_ = true;
+            let newTree = newValue.get();
+            let oldNode = this.tree_;
+            if (oldNode) {
+                if (!isEqual(oldNode.key(), newTree.key())) {
+                    oldNode.removeAll();
+                    oldNode = null;
+                }
+            }
+            this.tree_ = this.populateTreeRec_(this.treeDiv_, {pos: 0}, [], [], oldNode, this.oldValue_, newTree);
             this.oldValue_ = newValue.get();
             this.expandHelper_.forceUpdate();
         } else {
             this.addErrors_(helper);
         }
     }
-    else {
-        this.addErrors_(helper);
-    }
-};
 
-/**
- * attachable behaviours for widget
- */
-recoil.ui.widgets.TreeView.options = recoil.ui.util.StandardOptions(
-    'state', {config: recoil.ui.widgets.TreeView.defaultConfig});
-/**
- * @param {!recoil.frp.Behaviour<Object>|!Object} options
- * @param {!recoil.frp.Behaviour<{expanded:Object,internal:(boolean|undefined)}>=} opt_expandedB
- */
-recoil.ui.widgets.TreeView.prototype.attach = function(options, opt_expandedB) {
-    var frp = this.scope_.getFrp();
-
-    var bound = recoil.ui.widgets.TreeView.options.bind(frp, options);
-
-    this.configB_ = bound.config();
-    this.stateB_ = bound.state();
-    this.expandedB_ = opt_expandedB || frp.createB({internal: true, expanded: {}});
-
-    this.config_.attach(this.configB_);
-    this.state_.attach(this.stateB_);
-    this.expandHelper_.attach(this.expandedB_);
-
-};
-/**
- * tests if the values of the nodes are the same
- * @private
- * @param {recoil.structs.Tree} a
- * @param {recoil.structs.Tree} b
- * @return {boolean}
- */
-recoil.ui.widgets.TreeView.same_ = function(a, b) {
-    return recoil.util.isEqual(a.key(), b.key());
-};
-/**
- * @param {string} key
- * @return {!recoil.ui.widgets.TreeNode}
- */
-recoil.ui.widgets.TreeView.prototype.createNode = function(key) {
-    //    return this.tree_.createNode('');
-
-    var node = new recoil.ui.widgets.TreeNode(key, 'blank',
-                                              this.tree_.getConfig(), this.tree_.getDomHelper());
-    node.listen(goog.ui.tree.BaseNode.EventType.EXPAND, this.expandListener_, false, this);
-    node.listen(goog.ui.tree.BaseNode.EventType.COLLAPSE, this.expandListener_, false, this);
-    return node;
-};
-/**
- * @param {?} e
- * @private
- */
-recoil.ui.widgets.TreeView.prototype.expandListener_ = function(e) {
-    if (this.blockExpandEvents_) {
-        return;
-    }
-    this.updateExpanded_();
-};
-
-/**
- * @param {goog.ui.tree.BaseNode} node
- * @param {recoil.ui.Widget} widget
- */
-recoil.ui.widgets.TreeView.prototype.setNodeContent = function(node, widget) {
-    if (node.setDom) {
-        node.setDom(widget.getComponent());
-    }
-};
-
-/**
- * @private
- * @param {goog.ui.tree.BaseNode} parent
- * @param {goog.ui.tree.BaseNode} node
- * @param {!Array<string>} path
- * @param {recoil.structs.Tree} oldValue
- * @param {recoil.structs.Tree} newValue
- */
-recoil.ui.widgets.TreeView.prototype.populateTreeRec_ = function(parent, node, path, oldValue, newValue) {
-    // var numChildren = getNumChildren(parentValue);
-    // var oldNumChildren = getNumChildren(oldValue);;
-
-    if (oldValue === newValue) {
-        return;
-    }
-    var me = this;
-    if (newValue === null || newValue === undefined) {
-        if (node) {
-            parent.removeChild(node);
-        }
-        return;
-    }
-    else if (oldValue === undefined || oldValue === null) {
-        this.setNodeContent(node, this.nodeFactory_(me.scope_, recoil.frp.tree.getValueB(me.stateB_, path), node));
-        newValue.children().forEach(function(child) {
-            var newNode = me.createNode(child.key());
-            var newPath = goog.array.clone(path);
-            newPath.push(child.key());
-            me.populateTreeRec_(node, newNode, newPath, null, child);
-            // we have to add after otherwise the folder icon is incorrect
-            node.addChild(newNode);
+    /**
+     * attachable behaviours for widget
+     */
+    static options = StandardOptions(
+        'value', {
+            indentWidth: 19,
+            showRoot: true,
+            showLines: true,
+            oneClickExpand: true,
+            collapseChildren: false, // if you collapase a node collapse the children as well
+            labelClickExpand: true,
+            isRightToLeft: false,
+            isUserCollapsible: true,
+            clickCallback: null,
+            expanded: null,
+            renderer: TreeView.defaultLabelRenderer,
+            iconRenderer: TreeView.defaultIconRenderer,
+            expandRenderer: TreeView.defaultExpandRenderer, // set to null if you don't want to show expand icons
+            afterLabelRenderer: TreeView.defaultAfterLabelRenderer,
+            domHelper: new DomHelper(),
         });
-        return;
-    }
-    else if (recoil.util.isEqual(oldValue.key(), newValue.key())) {
-        // do nothing
-    }
-    else {
-        this.setNodeContent(node, this.nodeFactory_(me.scope_, recoil.frp.tree.getValueB(me.stateB_, path), node));
+
+
+    attach(options: AttachType<{
+        value: Type,
+        expanded?: ExpandInfoExpanded | boolean,
+        oneClickExpand?: boolean,
+        collapseChildren?: boolean,
+        expandRenderer?:((scope: WidgetScope, path: string[], treeB: Behaviour<Tree<Type>>, state: ExpandState) => Element) | null,
+        labelClickExpand?: boolean,
+        showRoot?: boolean, showLines?: boolean,
+
+    }>) {
+        let frp = this.scope_.getFrp();
+
+        let bound = TreeView.options.bind(frp, options);
+
+        this.configB_ = getOptionsGroup(bound, [
+            bound.indentWidth, bound.showRoot, bound.showLines, bound.showExpandedIcons,
+            bound.clickCallback, bound.renderer, bound.iconRenderer,
+            bound.afterLabelRenderer, bound.expandRenderer, bound.domHelper,
+            bound.oneClickExpand, bound.collapseChildren,
+            bound.labelClickExpand, bound.isUserCollapsible, bound.isRightToLeft,
+        ]);
+        this.valueB_ = bound.value();
+        // expanded can't be read only otherwise it won't work
+        let expandedInternalB = frp.createB<ExpandInfo>({internal: true, expanded: new ExpandInfoExpanded()});
+
+        this.expandedB_ = frp.liftBI((internal: ExpandInfo, external: ExpandInfoExpanded | boolean | null): boolean | ExpandInfoExpanded => {
+                if (external !== null) {
+                    return external;
+                }
+                return internal.expanded;
+            },
+            (expanded, internalB, externalB) => {
+                internalB.set({internal: true, expanded: expanded});
+                externalB.set(expanded);
+            },
+            expandedInternalB, bound.expanded());
+
+        this.configHelper_.attach(this.configB_);
+        this.stateHelper_.attach(this.valueB_, this.configB_, this.expandedB_);
+        this.expandHelper_.attach(this.expandedB_);
+
+    };
+
+    /**
+     * tests if the values of the nodes are the same
+     */
+    private static same_<Type>(a: Tree<Type>, b: Tree<Type>):boolean {
+        return isEqual(a.key(), b.key());
     }
 
-    var differences = recoil.ui.widgets.TreeView.minDifference(oldValue.children(), newValue.children(), recoil.ui.widgets.TreeView.same_);
-
-    var childIndex = 0;
-    for (var idx = 0; idx < differences.length; idx++) {
-        var diff = differences[idx];
-        var childNode = node.getChildAt(childIndex);
-        var newPath;
-        if (diff.oldVal !== undefined && diff.newVal !== undefined) {
-            newPath = goog.array.clone(path);
-            newPath.push(diff.newVal.key());
-            this.populateTreeRec_(node, childNode, newPath, diff.oldVal, diff.newVal);
-            childIndex++;
-        } else if (diff.newVal === undefined) {
-            node.removeChild(childNode);
-        } else if (diff.oldVal === undefined) {
-            newPath = goog.array.clone(path);
-            newPath.push(diff.newVal.key());
-            childNode = me.createNode(diff.newVal.key());
-            node.addChildAt(childNode, childIndex);
-            childIndex++;
-            this.populateTreeRec_(node, childNode, newPath, undefined, diff.newVal);
+    private expandListener_(e: Event) {
+        if (this.blockExpandEvents_) {
+            return;
         }
+        this.updateExpanded_();
+    };
+
+    /**
+     * TreeNodes are the current HTML Elements created
+     */
+    private populateTreeRec_(
+        container: HTMLDivElement,
+        location: { pos: number },
+        path: string[],
+        parentLastChildren: boolean[],
+        oldNode: TreeNode<Type> | null, oldValue: Tree<Type> | null, newValue: Tree<Type> | null): TreeNode<Type> | null {
+        // let numChildren = getNumChildren(parentValue);
+        // let oldNumChildren = getNumChildren(oldValue);;
+        if (!this.valueB_ || !this.configB_) {
+            return null;
+        }
+        if (!newValue) {
+            if (oldValue && oldNode) {
+                oldNode.removeAll();
+            }
+            return null;
+        }
+
+        let config = this.configB_.get();
+        let newPath: [...string[], string] = [...path, newValue.key()];
+
+        const show = config.showRoot || path.length > 0;
+        // do child nodes
+        let expanded = this.isExpanded(newPath);
+        if (!oldValue || !oldNode) {
+            // if the old value or old node doesn't exist we can just construct the tree ignoring the old value trees
+            let curNode = new TreeNode<Type>(this.scope_, this.valueB_, this, newPath, newValue.value(), config);
+            if (show) {
+                insertChildAt(container, curNode.getElement(), location.pos++);
+            }
+
+            // if we are not showing the root we can't stop here
+            if (!expanded && show) {
+                curNode.updateDom(parentLastChildren, newValue.children().length === 0)
+                return curNode;
+            }
+            let children = newValue.children();
+            let idx = 0;
+            for (let child of children) {
+
+                let childNode = this.populateTreeRec_(container, location, newPath, [...parentLastChildren, idx === children.length - 1], null, null, child);
+                if (childNode) {
+                    curNode.addChild(childNode);
+                }
+                idx++;
+            }
+            curNode.updateDom(parentLastChildren, newValue.children().length === 0)
+            return curNode;
+        }
+
+        let curNode = oldNode;
+        if (container.children[location.pos] !== curNode.getElement()) {
+            removeNode(curNode.getElement());
+            if (show) {
+                insertChildAt(container, curNode.getElement(), location.pos++);
+            }
+        } else {
+            if (show) {
+                location.pos++;
+            }
+        }
+
+        if (!expanded) {
+            // just delete all the children of the old node since they shouldn't bet there
+            if (oldNode) {
+                for (let node of oldNode.getChildren()) {
+                    node.removeAll();
+                }
+            }
+            curNode.setChildren([]);
+            curNode.updateDom(parentLastChildren, newValue.children().length === 0);
+            return curNode;
+        } else {
+            let differences = TreeView.minDifference(oldValue.children(), newValue.children(), TreeView.same_);
+
+            let newChildren: TreeNode<Type>[] = [];
+            let notRemoved = new Set<TreeNode<Type>>(oldNode.getChildren());
+
+            let lastChild = newValue.children()[newValue.children().length - 1];
+            for (let diff of differences) {
+                let oldChild = oldNode.find(diff.oldVal);
+                if (oldChild) {
+                    notRemoved.delete(oldChild);
+                }
+                let newChild: TreeNode<Type> | null = null;
+                if (diff.oldVal !== undefined && diff.newVal !== undefined) {
+                    newChild = this.populateTreeRec_(container, location, newPath, [...parentLastChildren, lastChild === diff.newVal], oldChild, diff.oldVal, diff.newVal);
+                } else if (diff.newVal === undefined) {
+                    newChild = this.populateTreeRec_(container, location, newPath, [...parentLastChildren, false], oldChild, diff.oldVal!, null);
+                } else if (diff.oldVal === undefined) {
+                    newChild = this.populateTreeRec_(container, location, newPath, [...parentLastChildren, lastChild === diff.newVal], null, null, diff.newVal);
+                }
+                if (newChild) {
+                    newChildren.push(newChild);
+                }
+            }
+            for (let child of notRemoved) {
+                child.removeAll();
+            }
+
+            curNode.setChildren(newChildren);
+        }
+        curNode.updateDom(parentLastChildren, newValue.children().length === 0);
+        return curNode;
     }
 
-};
+    static createDiffGrid<Type>(origList: Tree<Type>[], newList: Tree<Type>[], isEqual: (x: Tree<Type>, y: Tree<Type>) => boolean) {
 
-/*
- * (function( $, undefined ) { $.extend($.ui, { treeview: { version: "0.0.1" } });
- *
- * var PROP_NAME = "treeview";
- *
- *
- * function getNumChildren(value) { if (value === undefined) { return 0; } return value.children === undefined ? 0 :
- * value.children.length; }
- *
- * function cloneArray(start, arr) { var res = [];
- *
- * for (var i = start; i <arr.length; i++) { res.push(arr[i]); }
- *
- * return res; }
- *
- * function cloneAndAppend(arr, val) { var res = cloneArray(0, arr); res.push(val); return res; }
- *
- * function shallowCopy(object) { if (object instanceof Array) { var x = cloneArray(0, object); return x; } var res =
- * {}; for (var i in object) { res[i] = object[i]; } return res; } function setTreeValue(tree, path, setter) { if
- * (path.length === 0) { return tree; } if (!sameVal(path[0], tree)) { return tree; }
- *
- * var res = shallowCopy(tree); res.children = [];
- *
- * if (path.length === 1 ) { setter(res); }
- *
- *
- * var newPath = cloneArray(1, path); for (var i = 0; i < tree.children.length; i++) {
- * res.children.push(setTreeValue(tree.children[i], newPath, setter)); }
- *
- * return res;
- *  } function same(x, y) { if (x === undefined && y == undefined) { return true; } if (x === undefined || y ==
- * undefined) { return false; } return x.expanded === y.expanded && x.icon === y.icon && x.value === y.value; }
- *
- * function sameVal(x, y) { if (x === undefined && y == undefined) { return true; } if (x === undefined || y ==
- * undefined) { return false; } return x.icon === y.icon && x.value === y.value; }
- *
- */
-/**
- * this is a minimum edit distance algorithm,
- *
- * the edit types are currently insert, delete, (no modify operation, you must parameterise this in order to use it)
- *
- * the result is a list of objects in the form of {oldValue:? , newValue:?}
- *
- * if both are defined then no change, if only oldValue is defined, it was a delete, if only newValue is defined, it was
- * an insert
- *
- * isEqual is a function that takes 2 items and return if 2 items in the input list are equal.
- * @param {!Array<?>} origList
- * @param {!Array<?>} newList
- * @param {function (?,?) : boolean} isEqual
- * @return {!Array<Object>}
- */
-
-recoil.ui.widgets.TreeView.minDifference = function(origList, newList, isEqual) {
-
-    function createDiffGrid(origList, newList, isEqual) {
-
-        var grid = [];
-        for (var i = 0; i <= origList.length; i++) {
+        let grid: {
+            i?: number, j?: number,
+            oldVal?: Tree<Type>, newVal?: Tree<Type>,
+            val: number
+        }[][] = [];
+        for (let i = 0; i <= origList.length; i++) {
             grid[i] = [];
             grid[i][0] = {
                 val: i
@@ -770,7 +504,7 @@ recoil.ui.widgets.TreeView.minDifference = function(origList, newList, isEqual) 
 
         }
 
-        for (var i = 0; i <= newList.length; i++) {
+        for (let i = 0; i <= newList.length; i++) {
             grid[0][i] = {
                 val: i
             };
@@ -781,8 +515,8 @@ recoil.ui.widgets.TreeView.minDifference = function(origList, newList, isEqual) 
             }
         }
 
-        for (var i = 1; i <= origList.length; i++) {
-            for (var j = 1; j <= newList.length; j++) {
+        for (let i = 1; i <= origList.length; i++) {
+            for (let j = 1; j <= newList.length; j++) {
                 if (isEqual(origList[i - 1], newList[j - 1]) && grid[i - 1][j - 1].val <= grid[i - 1][j].val && grid[i - 1][j - 1].val <= grid[i][j - 1].val) {
                     grid[i][j] = {
                         val: grid[i - 1][j - 1].val,
@@ -811,76 +545,596 @@ recoil.ui.widgets.TreeView.minDifference = function(origList, newList, isEqual) 
         return grid;
     }
 
-    var grid = createDiffGrid(origList, newList, isEqual);
+    /**
+     * this is a minimum edit distance algorithm,
+     *
+     * the edit types are currently insert, delete, (no modify operation, you must parameterise this in order to use it)
+     *
+     * the result is a list of objects in the form of {oldValue:? , newValue:?}
+     *
+     * if both are defined then no change, if only oldValue is defined, it was a delete, if only newValue is defined, it was
+     * an insert
+     *
+     * isEqual is a function that takes 2 items and return if 2 items in the input list are equal.
+     */
 
-    var res = [];
-    var i = origList.length;
-    var j = newList.length;
+    static minDifference<Type>(origList: Tree<Type>[], newList: Tree<Type>[], isEqual: (x: Tree<Type>, y: Tree<Type>) => boolean) {
+        let grid = TreeView.createDiffGrid(origList, newList, isEqual);
 
-    while (i !== 0 || j !== 0) {
-        var g = grid[i][j];
-        if (g.newVal == undefined) {
-            res.push({
-                oldVal: g.oldVal
-            });
-        } else if (g.oldVal == undefined) {
-            res.push({
-                newVal: g.newVal
-            });
+        let res = [];
+        let i = origList.length;
+        let j = newList.length;
+
+        while (i !== 0 || j !== 0) {
+            let g = grid[i][j];
+            if (g.newVal == undefined) {
+                res.push({
+                    oldVal: g.oldVal
+                });
+            } else if (g.oldVal == undefined) {
+                res.push({
+                    newVal: g.newVal
+                });
+            } else {
+                res.push({
+                    newVal: g.newVal,
+                    oldVal: g.oldVal
+                });
+            }
+
+            i = g.i as number;
+            j = g.j as number;
+
+        }
+        res.reverse();
+        return res;
+
+    };
+
+ static createExpanded(frp: Frp, key: string, version: string, opt_defaultExpanded?: ExpandInfoExpanded) {
+        let defaultExpanded = opt_defaultExpanded || new ExpandInfoExpanded();
+
+        let expandedInternalB = frp.createB(false);
+        let expandedStoreB = LocalBehaviour.createSessionLocal(
+            frp, version, key, defaultExpanded);
+
+        return frp.liftBI(
+            function (store, internal) {
+                if (internal) {
+                    return {internal: true, expanded: store};
+                }
+                return {expanded: store};
+            }, function (val) {
+                expandedInternalB.set(!!val.internal);
+                expandedStoreB.set(val.expanded);
+
+            }, expandedStoreB, expandedInternalB);
+
+    };
+
+    static defaultLabelRenderer<Type>(scope: WidgetScope, path: string[], treeB: Behaviour<Tree<Type>>): Element {
+
+        let valueB = getValueB(treeB, path);
+        let el = createDom(TagName.SPAN, {});
+        let helper = new WidgetHelper(scope, el, null, () => {
+            removeChildren(el);
+            enable(el, "recoil-error", valueB.metaGet().errors().length > 0)
+            if (valueB.good()) {
+                let value = valueB.get();
+                el.appendChild(createTextNode(value == null ? "null" : value.toString()))
+            }
+            else {
+                for (let err of valueB.metaGet().errors()) {
+                    el.appendChild(createTextNode(err.toString()))
+                }
+
+            }
+        });
+
+        helper.attach(valueB);
+
+        return el ;
+    }
+
+    static defaultIconRenderer(_scope: WidgetScope, path: string[], value: any): Element {
+        return createDom(TagName.SPAN, {}, "someIcon");
+    }
+
+    static defaultExpandRenderer<Type>(_scope: WidgetScope, _path: string[], _treeB:Behaviour<Tree<Type>>, expandState: ExpandState): Element {
+        switch (expandState) {
+            case ExpandState.leaf:
+                return createDom(TagName.I, "fa-regular fa-file");
+            case ExpandState.collapsed:
+                return createDom(TagName.I, "fa-regular fa-folder-closed");
+            case ExpandState.expanded:
+                return createDom(TagName.I, "fa-regular fa-folder-open");
+
+        }
+    }
+
+    static defaultAfterLabelRenderer(scope: WidgetScope, path: string[], value: any): Element {
+        return createDom(TagName.SPAN, {}, "after");
+    }
+
+    toggle(path: string[]) {
+        if (!this.valueB_ || !this.expandedB_ || !this.configB_) {
+            return;
+        }
+        this.scope_.getFrp().accessTrans(() => {
+            let value = this.valueB_!.get();
+            let expandInfo = this.expandedB_!.get()
+            let expand = !TreeView.expandContains(expandInfo, path);
+            if (value.hasChildren(path)) {
+                return;
+            }
+            const config = this.configB_!.get();
+            this.expandedB_?.set(TreeView.expandPath(value, expandInfo, path, expand, config.showRoot, config.collapseChildren));
+        }, this.valueB_, this.configB_, this.expandedB_)
+    }
+
+    private static buildFullyExpanded<Type>(tree: Tree<Type>): { expand: boolean, children: ExpandInfoExpanded } {
+        let res = {expand: true, children: new ExpandInfoExpanded()};
+        for (let child of tree.children()) {
+            res.children[child.key()] = TreeView.buildFullyExpanded(child);
+        }
+        return res;
+    }
+
+    public static expandPath<Type>(
+        tree: Tree<Type>, curState: ExpandInfoExpanded | boolean, path: string[],
+        doExpand: boolean, showRoot:boolean, collapseChildren: boolean) {
+        let state: ExpandInfoExpanded;
+
+        if (curState === true) {
+            state = new ExpandInfoExpanded();
+            state[tree.key()] = TreeView.buildFullyExpanded(tree);
+        } else if (curState === false) {
+            state = new ExpandInfoExpanded();
+            // if showRoot is false the root is always expanded
+            state[tree.key()] = { expand: true, children: new ExpandInfoExpanded() };
         } else {
-            res.push({
-                newVal: g.newVal,
-                oldVal: g.oldVal
-            });
+            state = curState;
         }
 
-        i = g.i;
-        j = g.j;
+        if (doExpand) {
+            let cur = {expand: true, children: new ExpandInfoExpanded(state)};
+            state = cur.children;
+            for (let item of path) {
+                let child = cur.children[item];
+                let newVal = {expand: true, children: new ExpandInfoExpanded(child?.children)};
+                cur.children[item] = newVal;
+                cur = newVal;
+            }
+        } else {
+            // todo stop root from collapsing  if show root is false
+            let cur = {expand: true, children: new ExpandInfoExpanded(state)};
+            state = cur.children;
+            let seen = [];
+            seen.push(cur);
+            for (let item of path) {
+                let child = cur.children[item];
+                let newVal = {expand: cur.expand, children: new ExpandInfoExpanded(child?.children)};
+                cur.children[item] = newVal;
+                cur = newVal;
+                seen.push(cur);
+            }
+            seen[seen.length - 1].expand = false;
+
+            if (collapseChildren) {
+                let children = seen[seen.length - 1].children;
+                for (let child in children) {
+                    delete children[child];
+                }
+            }
+            else {
+                for (let i = seen.length - 1; i >= 0; i--) {
+                    let item = seen[i];
+                    if (item.expand || TreeView.hasExpandedChildren(cur.children)) {
+                        break;
+                    }
+                    if (i > 1) {
+                        let children = seen[i - 1].children;
+                        delete children[path[i - 1]];
+                    }
+                }
+            }
+
+        }
+        return state;
+    }
+
+    public static expandContains(expanded: ExpandInfoExpanded | boolean, path: string[]) {
+        if (expanded === true || expanded === false) {
+            return expanded;
+        }
+        let cur = {expand: true, children: expanded};
+        for (let i = 0; i < path.length && cur; i++) {
+            if (!cur.expand) {
+                return false;
+            }
+            cur = cur.children[path[i]];
+        }
+        return cur ? cur.expand : false;
+    }
+
+    private static hasExpandedChildren(children: ExpandInfoExpanded) {
+        for (let k in children) {
+            if (children[k].expand) {
+                return true;
+            }
+            if (TreeView.hasExpandedChildren(children[k].children)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    isExpanded(path: string[]) {
+        return this.scope_.getFrp().accessTrans(() => {
+            let expanded = this.expandedB_!.get();
+            return TreeView.expandContains(expanded, path);
+        }, this.expandedB_!)
+    }
+
+    expandPath(path: string[], expand: boolean) {
+        this.scope_.getFrp().accessTrans(() => {
+            let expandedInfo = this.expandedB_!.get();
+            const config = this.configB_!.get()
+            this.expandedB_?.set(TreeView.expandPath(this.valueB_!.get(), expandedInfo, path, expand,config.showRoot, config.collapseChildren));
+        }, this.expandedB_!, this.valueB_!, this.configB_!)
+    }
+}
+
+export class TreeNode<Type> {
+    private readonly key_: string;
+    private readonly label_: HTMLElement;
+    private readonly row_: HTMLDivElement;
+    private readonly spacers_: HTMLTableCellElement[];
+    private readonly lines_: HTMLDivElement;
+    private readonly element_: HTMLDivElement;
+    private readonly icon_: HTMLSpanElement;
+    private readonly expand_: HTMLSpanElement;
+    private readonly afterLabel_: HTMLSpanElement;
+
+    private parent_: TreeNode<Type> | null = null;
+    private children_: TreeNode<Type>[] = [];
+    private readonly config_: ConfigInfo<Type>;
+    private readonly scope_: WidgetScope;
+    private readonly tree_: TreeView<Type>
+    private readonly treeB_: Behaviour<Tree<Type>>;
+    private path_: [string, ...string[]];
+    private expandState_: ExpandState | undefined;
+
+
+    constructor(scope: WidgetScope, treeB:Behaviour<Tree<Type>>, tree: TreeView<Type>, path: [string, ...string[]] | [...string[], string], value: Type, config: ConfigInfo<Type>) {
+        this.scope_ = scope;
+        this.key_ = path[path.length - 1];
+        this.path_ = path as [string, ...string[]];
+        this.treeB_ = treeB;
+        this.tree_ = tree;
+        this.icon_ = createDom(TagName.SPAN, {class: 'recoil-tree-icon'});
+        let pathAdj = config.showRoot? -1: -2;
+        this.spacers_ = Array(Math.max(0,path.length + pathAdj)).fill(null).map(_ => createDom(TagName.TD, {
+            class: 'recoil-tree-spacer',
+            style: {width: config.indentWidth + 'px'}
+        }));
+        if (config.expandRenderer) {
+            this.expand_ = createDom(TagName.SPAN, {
+                class: 'recoil-tree-expand',
+                tabIndex: 0
+            });
+        }
+        else {
+            this.expand_ = createDom(TagName.SPAN, {
+                class: 'recoil-tree-expand',
+            });
+
+        }
+        this.lines_ = createDom(TagName.TD, {class: 'recoil-tree-line'}, this.expand_);
+        enable(this.lines_, "recoil-tree-show-expand", !!config.expandRenderer)
+        this.label_ = createDom(TagName.SPAN, {class: 'recoil-tree-label'}, config.renderer(scope, path.slice(1), treeB));
+        this.afterLabel_ = createDom(TagName.SPAN, {class: 'recoil-tree-after-label'});
+        this.row_ = createDom(TagName.TD, {
+            class: 'recoil-tree-row',
+            colspan: "100%",
+        }, this.icon_, this.label_, this.afterLabel_);
+        this.element_ = createDom(TagName.TR, {class: 'recoil-tree-element'}, ...[...this.spacers_, this.lines_, this.row_]);
+        this.lines_.style.width = (config.indentWidth) + 'px';
+        this.config_ = config;
+
+        EventHelper.listen(config.expandRenderer ? this.expand_ : this.row_, EventType.KEYDOWN, (e: KeyboardEvent) => {
+            if (this.expandState_ != ExpandState.leaf) {
+                if (e.key == " ") {
+                    this.tree_.toggle(path);
+                    e.preventDefault();
+                }
+                else if (e.ctrlKey) {
+                    if (e.key === "ArrowRight") {
+                        if (!this.getExpanded()) {
+                            this.tree_.toggle(path);
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                    } else if (e.key === "ArrowLeft") {
+                        if (this.getExpanded()) {
+                            this.tree_.toggle(path);
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+
+                    }
+                }
+            }
+        });
+        EventHelper.listen(this.row_, EventType.CLICK, (e: MouseEvent) => this.onClick_(e, false));
+        EventHelper.listen(this.expand_, EventType.CLICK, (e: MouseEvent) => this.onClick_(e, true));
 
     }
-    res.reverse();
-    return res;
 
-};
+    getElement() {
+        return this.element_
+    }
+    addChild(node: TreeNode<Type>) {
+        node.parent_ = this;
+        this.children_.push(node);
+    }
 
-/**
- * @param {!recoil.frp.Frp} frp
- * @param {string} key
- * @param {string} version
- * @param {?=} opt_defaultExpanded
- * @return {!recoil.frp.Behaviour}
- */
-recoil.ui.widgets.TreeView.createExpanded = function (frp, key, version, opt_defaultExpanded) {
-    let defaultExpanded = opt_defaultExpanded || {};
-    
-    let expandedInternalB = frp.createB(false);
-    var expandedStoreB = recoil.ui.frp.LocalBehaviour.createSessionLocal(
-        frp, version , key, defaultExpanded);
+    hasChildren() {
+        return this.children_.length > 0;
+    }
 
-    return frp.liftBI(
-        function(store, internal) {
-            if (internal) {
-                return {internal: true, expanded: store};
+    getExpanded(): boolean {
+        return this.tree_.isExpanded(this.path());
+    }
+
+    getChildren(): TreeNode<Type>[] {
+        return this.children_;
+    }
+
+    getParent(): TreeNode<Type> | null {
+        return this.parent_;
+    }
+
+    /**
+     * @return {string}
+     */
+    key(): string {
+        return this.key_;
+    }
+
+    /**
+     * @return {!Array<string>}
+     */
+    path(): string[] {
+        return this.path_;
+    }
+
+    setContent(content: Element) {
+        removeChildren(this.label_);
+        this.label_.appendChild(content);
+    }
+
+    /**
+     * Selects the node.
+     */
+    select() {
+        //recoil.ui.widgets.TreeNode.superClass_.select.call(this);
+    }
+
+    /**
+     * Handles a key down event.
+     */
+    private onKeyDown(e: KeyboardEvent) {
+        /* todo  let handled = recoil.ui.widgets.TreeNode.superClass_.onKeyDown.call(this, e);
+          if (handled && this.getTree().getSelectedItem()) {
+              let selected = this.getTree().getSelectedItem();
+              if (selected) {
+                  let el = selected.getRowElement();
+                  if (el) {
+                      TreeView.scrollIfNeeded(el);
+                  }
+              }
+          }
+          return handled;*/
+    }
+
+    private onClick_(e: MouseEvent, expandClick:boolean) {
+        let el = e.target;
+        // expand icon
+
+        if (!(el instanceof HTMLElement)) {
+            return;
+        }
+        if (this.config_.clickCallback && this.config_.clickCallback(e)) {
+            return;
+        }
+        if (e.altKey || e.ctrlKey || e.shiftKey) {
+            return;
+        }
+        if (this.config_.isUserCollapsible) {
+            let clickExpands = expandClick || (this.config_.labelClickExpand && (this.config_.oneClickExpand || e.detail == 2));
+
+            if (clickExpands) {
+                if (e.button !== 0) {
+                    return;
+                }
+                this.tree_.toggle(this.path());
+
+                e.stopPropagation();
+                e.preventDefault();
             }
-            return {expanded: store};
-        }, function(val) {
-            expandedInternalB.set(!!val.internal);
-            expandedStoreB.set(val.expanded);
-            
-        }, expandedStoreB, expandedInternalB);
-    
-};
-/**
- *
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.TreeView.prototype.getComponent = function() {
-    return this.component_;
-};
+        }
+    }
 
-/**
- * all widgets should not allow themselves to be flatterned
- *
- */
+    getRoot() {
+        let cur = this.parent_;
+        while (cur && cur.parent_) {
+            cur = cur.parent_;
+        }
+        return cur;
+    }
 
-recoil.ui.widgets.TreeView.prototype.flatten = recoil.frp.struct.NO_FLATTEN;
+    /**
+     * Creates HTML for the node.
+     * @return {!Element}
+     * @protected
+     */
+    updateDom(parentChildren: boolean[], isLeaf: boolean) {
+
+        let config = this.config_;
+        let tree = this.getRoot();
+        let hideLines = !config.showLines ||
+            tree == this.getParent() && !config.showRoot;
+        let childClass =
+            hideLines ? "recoil-tree-children-no-lines" : "recoil-tree-children-lines";
+
+        enable(this.lines_, "recoil-tree-expanded", this.children_.length > 0);
+        enable(this.lines_, "recoil-tree-leaf", isLeaf);
+
+        let expandState = isLeaf ? ExpandState.leaf : (this.children_.length > 0 ? ExpandState.expanded : ExpandState.collapsed);
+        if (this.expandState_ != expandState) {
+            removeChildren(this.expand_);
+            if (this.config_.expandRenderer) {
+                this.expand_.appendChild(this.config_.expandRenderer(this.scope_, this.path().slice(1), this.treeB_, expandState));
+            }
+            this.expandState_ = expandState;
+        }
+        const rootAdj = config.showRoot ? 0 : 1;
+        for (let i = rootAdj; i  - rootAdj < this.spacers_.length && i < parentChildren.length; i++) {
+            let spacer = this.spacers_[i - rootAdj];
+
+            enable(spacer, "recoil-tree-spacer-last-sibling", parentChildren[i]);
+            enable(spacer, "recoil-tree-spacer-last-spacer", i + 1 - rootAdj == this.spacers_.length);
+        }
+        /*
+        let nonEmptyAndExpanded = this.getExpanded() && this.hasChildren();
+        if (this.children_.length > 0) {
+            if (!this.childrenElement_) {
+                this.childrenElement_ = this.domHelper_.createDom(TagName.DIV, {class: "recoil-tree-children"});
+                this.element_.appendChild(this.childrenElement_)
+            }
+            removeChildren(this.childrenElement_);
+
+            let content:Element[] = [];
+            if (nonEmptyAndExpanded) {
+                // children
+                for (let child of this.getChildren()) {
+                    content.push(child.element_);
+                }
+            }
+
+            enable(this.childrenElement_, "recoil-tree-children-no-lines", hideLines);
+            enable(this.childrenElement_, "recoil-tree-children-lines", hideLines);
+            enable(this.childrenElement_, "recoil-tree-line-style", true);
+
+            for (let child of content) {
+                this.childrenElement_.appendChild(child);
+            }
+
+        } else if (this.childrenElement_) {
+            removeNode(this.childrenElement_);
+            this.childrenElement_ = null;
+        }
+        */
+    }
+
+    updateExpandIcon() {
+
+    }
+
+    /**
+     * Sets the node to be expanded.
+     * @param {boolean} expanded Whether to expand or close the node.
+     * @suppress {visibility}
+     */
+    setExpanded(expanded: ExpandInfoExpanded | boolean) {
+        let isStateChange = expanded != this.getExpanded();
+        if (isStateChange) {
+            // Only fire events if the expanded state has actually changed.
+            /*            let prevented = !this.dispatchEvent(
+                            expanded ? goog.ui.tree.BaseNode.EventType.BEFORE_EXPAND :
+                                goog.ui.tree.BaseNode.EventType.BEFORE_COLLAPSE);
+                        if (prevented) return;*/
+        }
+        /*
+        this.setExpandedInternal(expanded);
+        let tree = this.getTree();
+        let expandOverride = tree.userToggle && this.getConfig().expandOverride;
+        let el = this.getElement();
+
+        if (this.hasChildren()) {
+            if (!expanded && tree && this.contains(tree.getSelectedItem())) {
+                this.select();
+            }
+
+            if (el) {
+                if (this.childrenElement_) {
+
+                    if (!expandOverride) {
+                        setElementShown(this.childrenElement_, expanded);
+                    }
+                    // Make sure we have the HTML for the children here.
+                    if (expanded && this.isInDocument() && !ce.hasChildNodes()) {
+                        let children = [];
+                        this.domHelper_.removeChildren(ce);
+                        for (let child of this.children_) {
+                            let childEl = child.toDom();
+                            children.push(childEl);
+                            ce.appendChild(childEl);
+                        }
+                    }
+                    if (expandOverride) {
+                        expandOverride(this.childrenElement_, expanded);
+                    }
+                }
+                this.updateExpandIcon();
+            }
+        } else {
+            if (this.childrenElement_) {
+                setElementShown(this.childrenElement_, false);
+            }
+        }
+        if (el) {
+            this.updateIcon_();
+            // todo goog.a11y.aria.setState(el, 'expanded', expanded);
+        }
+*/
+        if (isStateChange) {
+            // todo this.dispatchEvent(
+            //expanded ? goog.ui.tree.BaseNode.EventType.EXPAND :
+            //   goog.ui.tree.BaseNode.EventType.COLLAPSE);
+        }
+    }
+
+    setExpandedAll(expanded: boolean) {
+        this.setExpanded(expanded);
+        for (let child of this.children_) {
+            child.setExpandedAll(expanded);
+        }
+    }
+
+    setChildren(newChildren: TreeNode<Type>[]) {
+        this.children_ = newChildren;
+    }
+
+    find(val: Tree<Type> | undefined) {
+        if (!val) {
+            return null;
+        }
+        for (let child of this.children_) {
+            if (isEqual(child.key_, val.key())) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    removeAll() {
+        removeNode(this.getElement());
+        for (let child of this.children_) {
+            child.removeAll();
+        }
+    }
+}
+
+

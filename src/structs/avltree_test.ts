@@ -1,9 +1,9 @@
 import assert from 'assert/strict';
 import test from 'node:test';
-import {AvlTree} from "./avltree";
-import {compare, isEqual} from "../util/object";
+import {AvlTree} from "./avltree.ts";
+import {compare, isEqual} from "../util/object.ts";
 
-const array = require("./array");
+import * as array from"./array.ts";
 
 test("insert with default comparator", t => {
 

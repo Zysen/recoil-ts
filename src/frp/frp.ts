@@ -4,13 +4,28 @@ import {isEqual} from "../util/object.ts";
 import {LoopDetected, NoAccessors, NotAttached, NotInTransaction} from "../exception/exception.ts";
 import {SerializedSet, SerializedMap} from "../structs/serialized_collections.ts";
 import {removeIf} from "../structs/array.ts";
-import {assert, fail} from "../util/goog.ts";
+import {fail} from "../util/goog.ts";
 import {Message} from "../ui/message.ts";
 
 export type BehaviourList = Behaviour<any,any, any, any>[];
 export type BehaviourList1<Type = any> = [Behaviour<Type,any, any>, ...Behaviour<Type,any, any>[]];
+export type BehaviourListInv1<Type = any> = [Behaviour<any,Type, any>, ...Behaviour<any,Type, any>[]];
 export type BehaviourCalcFn<T> = (...args:any[]) => T;
 export type BehaviourCalcThisFn<T> = (this:any,...args:any[]) => T;
+type BehaviourListPrefix<T extends BehaviourList> =
+    T extends [infer Head, ...infer Tail]
+        ? (Head extends Behaviour<any> ? (Tail extends BehaviourList ? [Head, ...BehaviourListPrefix<Tail>] : never) : never)
+        : [];
+
+export type TypedBehaviourList<T extends any[]> =
+    T extends [infer Head, ...infer Tail]
+        ? (Tail extends any[] ? [Behaviour<Head>, ...TypedBehaviourList<Tail>] : never)
+        : [];
+
+type ListPrefix<T extends any[]> =
+    T extends [infer Head, ...infer Tail]
+        ? (Tail extends any[] ? [Head, ...BehaviourListPrefix<Tail>] : never)
+        : [];
 
 type DebugState = {
     args: [() => void, ...Behaviour<any>[]];
@@ -36,6 +51,9 @@ type InvAllStatusFunctionType<T, InvType> = InvStatusFunctionType<T,InvType>|
     InvBStatusFunctionType<T, InvType>|
     InvEStatusFunctionType<T, InvType>|
     InvFunctionType<T, InvType>;
+type ToCalc<T> = T extends Behaviour<any,any,any,infer V> ? V : never;
+type StripBehaviourArray<T extends any[]> = T extends [infer H, ...infer Tail]
+    ?  (Tail extends Behaviour<any>[] ? ([ToCalc<H>, ...StripBehaviourArray<Tail>]  ): never) : [];
 
 //((v: Status<any,T>) => void)|((v: BStatus<T>) => void)
 interface ProviderInfo {
@@ -123,7 +141,7 @@ export class Frp {
      */
     detach(behaviour: Behaviour<any>) {
         this.transactionManager_.detach(behaviour);
-    };
+    }
 
     static compareSeq_(a: BehaviourId, b: BehaviourId): number {
         let len = a.length > b.length ? b.length : a.length;
@@ -151,20 +169,20 @@ export class Frp {
      */
     setDebugger(dbugger: Debugger) {
         this.transactionManager_.debugger_ = dbugger;
-    };
-
-    addTransactionWatcher(cb: (started: boolean) => void) {
-        this.transactionManager_.watchers_.push(cb);
-    };
+    }
 
     /**
-     * @param cb called with true if started false if ended
+     * @param cb called with true if the transaction is started and false if the transaction it is ended
      */
+    addTransactionWatcher(cb: (started: boolean) => void) {
+        this.transactionManager_.watchers_.push(cb);
+    }
+
     removeTransactionWatcher (cb: (started: boolean) => void) {
         removeIf(this.transactionManager_.watchers_, function (v) {
             return v === cb;
         });
-    };
+    }
 
     /**
      * for debugging, if the debugger has paused the execution this resumes
@@ -196,7 +214,7 @@ export class Frp {
     /**
      * create a generator event set this value to send values up the tree
      */
-    createE<T>(): Behaviour<T,T,T[]> {
+    createE<T>(): FrpEvent<T> {
         let metaInitial = EStatus.notReady<T>(true);
         return new Behaviour<T,T,T[]>(this, metaInitial as EStatus<T, any>, undefined, undefined, this.transactionManager_.nextIndex(), []);
     }
@@ -204,10 +222,10 @@ export class Frp {
         return new Behaviour<T>(this, initial, undefined, undefined, this.transactionManager_.nextIndex(), []);
     }
 
-    createConstB<T>(initial: T): Behaviour<T> {
+    createConstB<T>(initial: T): Behaviour<T,T,T,T> {
         let metaInitial = new BStatus(initial);
         return new Behaviour<T>(this, metaInitial, () => metaInitial, Frp.nullInvFunc_, this.transactionManager_.nextIndex(), []);
-    };
+    }
 
     /**
      * allows access to behaviours and also puts the callback in a transaction
@@ -255,7 +273,7 @@ export class Frp {
             }
             return me.accessTrans.apply(this, [func, ...var_behaviours]) as T;
         };
-    };
+    }
 
     static access(callback: () => void, ...var_behaviours: Behaviour<any>[]) {
         for (let i = 0; i < var_behaviours.length; i++) {
@@ -338,7 +356,7 @@ export class Frp {
         let res = this.metaLiftBI(func, undefined, ...var_args);
         res.notifyReset_ = true;
         return res;
-    };
+    }
 
     metaLiftStatusI<T,InvType, OutType, CalcType>(func: (this: Behaviour<T,InvType, OutType>, ...args: []) => Status<any,OutType>,
                        invFunc?: InvAllStatusFunctionType<T,InvType>,
@@ -385,12 +403,12 @@ export class Frp {
      * @param args behaviours used in calculating the value of func
      * @return a behaviour that contains the value that func calculates
      */
-    liftB<RT>(func: (this:Behaviour<RT>, ...args: any[]) => RT, ...args: BehaviourList1): Behaviour<RT> {
+    liftB<RT, ArgList extends BehaviourList1 = BehaviourList1>(func: (this:Behaviour<any>, ...args: ListPrefix<StripBehaviourArray<ArgList>>) => RT, ...args: ArgList): Behaviour<RT,RT,RT,RT> {
         return this.liftBI(func, undefined, ...args);
     }
 
     /**
-     * utilty to return a behaviour that acts like an event, the difference between events and behaviours
+     * utility to return a behaviour that acts like an event, the difference between events and behaviours
      * is that events are arrays of values that have happened in the transaction phase and get cleared after that
      *
      * @param func used to calculate the event that is returned
@@ -409,7 +427,7 @@ export class Frp {
      * @private
      */
     static nullInvFunc_() {
-    };
+    }
 
 
     /**
@@ -417,17 +435,17 @@ export class Frp {
      * Creates callback, this is basically a behaviour with only an inverse
      * the calculate function always returns true
      */
-    createCallback<InvType>(
-        func: (arg:InvType, ...args: Behaviour<any>[]) => void,
-        ...dependants: BehaviourList): Behaviour<null,InvType> {
-        let inv = function (this:Behaviour<any>, arg:InvType,...args: Behaviour<any>[]): void {
+    createCallback<InvType, ArgList extends BehaviourList>(
+        func: (arg:InvType, ...args: BehaviourListPrefix<ArgList>) => void,
+        ...dependants: ArgList): Behaviour<null,InvType> {
+        let inv = (arg:InvType,...args: BehaviourListPrefix<ArgList>): void => {
             return func.apply(this, [arg,...args]);
         };
         if (dependants.length === 0) {
             dependants.push(this.createB(0))
         }
 
-        return this.liftBI(Frp.nullFunc_ as any, inv, ...dependants) as Behaviour<null,InvType>;
+        return this.liftBI(Frp.nullFunc_ as any, inv as any , ...dependants as unknown as BehaviourList1) as Behaviour<null,InvType>;
     }
 
 
@@ -455,10 +473,10 @@ export class Frp {
      * takes input behaviours and makes a new behaviour
      */
 
-    liftBI<RT, InvType = RT>(
-        func: (this:Behaviour<RT,InvType>,...args: any[]) => RT,
-        invFunc: ((val: InvType, ...args: BehaviourList) => void) | undefined,
-        ...behaviours: BehaviourList): Behaviour<RT,InvType> {
+    liftBI<RT, InvType = any, ArgList extends BehaviourList1 = BehaviourList1>(
+        func: (this:Behaviour<any>,...args: ListPrefix<StripBehaviourArray<ArgList>>) => RT,
+        invFunc: ((val: InvType, ...args: BehaviourListPrefix<ArgList>) => void) | undefined,
+        ...behaviours: ArgList): Behaviour<RT,InvType> {
         return this.liftBI_<RT,InvType, RT,RT>(
             this.metaLiftBI,
             (() => new BStatus<RT,RT, InvType>(null)) as any,
@@ -474,7 +492,7 @@ export class Frp {
         invFunc: InvFunctionType<RT,InvType>,
         ...var_args: Behaviour<any>[]): Behaviour<RT, InvType> {
         return this.liftBI_(this.metaLiftBI, null, func, invFunc, ...var_args);
-    };
+    }
 
     /**
      * takes input behaviours and makes a new behaviour that stores an event
@@ -499,7 +517,7 @@ export class Frp {
         return this.liftE(function (val:T) {
             return [val];
         }, valB);
-    };
+    }
 
     mergeError(args: Status<any, any>[], opt_result:Status<any, any>) {
         let metaResult = opt_result || new BStatus(null);
@@ -525,19 +543,23 @@ export class Frp {
      * does nothing
      *
      */
-    toBehaviour<T>(value:T|Behaviour<T>, opt_default?:T):Behaviour<T> {
+    toBehaviour<T, InvType = T, OutType = T, CalcType = T>(value:T|Behaviour<T,InvType,OutType,CalcType>, opt_default?:T):Behaviour<T,InvType,OutType,CalcType> {
 
         if (value instanceof Behaviour) {
             return value;
         }
         else {
             if (opt_default !== undefined && value === undefined) {
-                return this.createConstB(opt_default);
+                return this.createConstB(opt_default) as Behaviour<T,InvType,OutType,CalcType>;
             }
-            return this.createConstB(value);
+            return this.createConstB(value) as unknown as Behaviour<T,InvType,OutType,CalcType>;
         }
     }
-
+    static assertHasOneBehaviour(list : BehaviourList): asserts list is BehaviourList1 {
+        if (list.length === 0) {
+            throw new Error('the behaviourList is empty');
+        }
+    }
     /**
      * func will fire if all dependant behaviours are good
      * or there is 1 ready event
@@ -699,7 +721,6 @@ export class EStatus<Type,InvType> implements Status<Type, Type[], InvType> {
     errors(): any[] {
         return this.errors_;
     }
-
     /**
      * events always good
      * @return {boolean}
@@ -728,14 +749,14 @@ export class EStatus<Type,InvType> implements Status<Type, Type[], InvType> {
 
     get(): Type[] {
         return this.values_ as Type[];
-    };
+    }
 
     addValue(value: Type): EStatus<Type, InvType> {
         let values = [...this.values_];
         values.push(value);
         return new EStatus<Type, InvType>(this.generator_, values);
 
-    };
+    }
 
     set(value: InvType): EStatus<Type, InvType> {
 
@@ -761,7 +782,7 @@ export class EStatus<Type,InvType> implements Status<Type, Type[], InvType> {
             this.errors_ = [];
             this.values_ = [];
         }
-    };
+    }
 }
 
 /**
@@ -780,7 +801,7 @@ export class BStatus<T, OutType = T, InvType = T> implements Status<T, OutType, 
         this.ready_ = true;
         this.value_ = initial;
 
-    };
+    }
 
 
     static notReady<T>(): BStatus<T> {
@@ -810,7 +831,7 @@ export class BStatus<T, OutType = T, InvType = T> implements Status<T, OutType, 
         }
         this.errors_ = this.errors_.concat(other.errors());
         this.ready_ = this.ready_ && ((other instanceof EStatus) || other.ready());
-    };
+    }
 
     /**
      * set the value of the status
@@ -818,16 +839,16 @@ export class BStatus<T, OutType = T, InvType = T> implements Status<T, OutType, 
     set(val: InvType): Status<T,OutType, InvType> {
         this.value_ = val;
         return this;
-    };
+    }
 
 
     set_(val: OutType | undefined) {
         this.value_ = val;
-    };
+    }
 
     get(): OutType {
         return this.value_ as OutType;
-    };
+    }
 
     ready(): boolean {
         return this.ready_;
@@ -845,6 +866,8 @@ export class BStatus<T, OutType = T, InvType = T> implements Status<T, OutType, 
         this.errors_.push(error);
     }
 }
+
+export type FrpEvent<T> = Behaviour<T, T, T[], T>;
 
 /**
  *
@@ -936,8 +959,8 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
      * the resulting behaviour will ignore all set
      */
     noInverseB(): Behaviour<T> {
-        return this.frp_.liftB(v => v, this);
-    };
+        return this.frp_.liftB<T>(v => v, this);
+    }
 
     /**
      * used for debugger gets the dependants of this behaviour
@@ -1046,7 +1069,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
      */
     getUniqId(): string {
         return this.origSeq_.join('.');
-    };
+    }
 
 
     /**
@@ -1101,7 +1124,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
 
     private getTm_() {
         return this.frp_.transactionManager_;
-    };
+    }
 
     /**
      * @private
@@ -1525,7 +1548,7 @@ export class Behaviour<T, InvType = T, OutType = T, CalcType = T> {
     static compareDownSeq(a:Behaviour<any>, b:Behaviour<any>):number {
         return Frp.compareSeq_(b.seq_, a.seq_);
     }
-    static downFunction(behaviour: Behaviour<any>, providers: BehaviourList, dependants: BehaviourList|undefined, nextItr: ProviderInfoList): BehaviourList {
+    static downFunction(behaviour: Behaviour<any>, _providers: BehaviourList, _dependants: BehaviourList|undefined, _nextItr: ProviderInfoList): BehaviourList {
         const getDirty = Behaviour.getDirtyDown;
         let changedDirty = [];
         if (behaviour.dirtyDown_) {
@@ -1602,7 +1625,7 @@ class TransactionManager {
      */
     getPendingUp(): BehaviourList {
         return this.getPending_(Direction.UP).asArray();
-    };
+    }
 
     /**
      * used by debugger, returns all pending behaviours in the down direction
@@ -1829,7 +1852,6 @@ class TransactionManager {
         let cur: Behaviour<any> | undefined = this.debugState_ ? this.debugState_.cur : pendingHeap.pop();
         let prev = null;
         let me = this;
-        let heapComparator = dir.heapComparator();
         while (cur !== undefined) {
 
             // calculate changed something
@@ -2010,7 +2032,7 @@ class TransactionManager {
             this.doTrans(() => {
                 let added = new BehaviourIdMap<Behaviour<any>>();
                 behaviour.addRefs_(this, null, added);
-                for (let [id, b] of added) {
+                for (let [_id, b] of added) {
                     newStuff.push(b);
                 }
             });
@@ -2058,7 +2080,6 @@ class TransactionManager {
 
 
         for (let [idx, rem] of removed) {
-            let add = added.get(idx);
             if (!added.has(idx)) {
                 this.removePending_(rem);
             }
@@ -2170,7 +2191,7 @@ class TransactionManager {
             let removed = new BehaviourIdMap<Behaviour<any>>();
             behaviour.removeRefs_(this, null, removed);
 
-            for (let [idx, b] of removed) {
+            for (let [_idx, b] of removed) {
                 // this may not account for 2 thing in the tree pointing to the
                 // same thing
                 b.dirtyDown_ = false;
@@ -2196,5 +2217,15 @@ class Direction {
 	 */
 	static DOWN = new TraverseDirection(
 		'down', Behaviour.downFunction, Behaviour.compareDownSeq);
+
+}
+
+
+function bob <ArgList extends any[]>(cb:(...cbArgs: StripBehaviourArray<ArgList>) => void, ...args: ArgList) {
+    let frp = new Frp();
+
+    frp.liftB((a:number, b:string) => {}, frp.createB(1), frp.createB("x"), frp.createB(""));
+    bob((a:number, b:string) => {}, frp.createB(1), frp.createB("x"), frp.createB(1));
+    frp.liftBI((a:number, b:string) => {}, (x:number, y:Behaviour<number,number,number,number>) => {}, frp.createB(1), frp.createB("x"), frp.createB(1));
 
 }

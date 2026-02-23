@@ -1,61 +1,22 @@
-goog.provide('recoil.ui.widgets.table.NumberColumn');
+import {Column, ColumnBase, LabelType} from "./column.ts";
+import {ColumnKey} from "../../../structs/table/columnkey.ts";
+import {StructType} from "../../../frp/struct.ts";
+import {NumberWidget} from "../number.ts";
+import {WidgetScope} from "../widgetscope.ts";
+import {Behaviour} from "../../../frp/frp.ts";
+import {TableCell} from "../../../structs/table/table.ts";
+import {TableCellHelper} from "../../../frp/table.ts";
 
-goog.require('recoil.frp.Behaviour');
-goog.require('recoil.frp.table.TableCell');
-goog.require('recoil.ui.widgets.NumberWidget');
-goog.require('recoil.ui.widgets.table.Column');
-/**
- *
- * @param {recoil.structs.table.ColumnKey} key
- * @param {string|Node} name
- * @param {(recoil.frp.Behaviour<Object>|Object)=} opt_options
- * @implements {recoil.ui.widgets.table.Column}
- * @constructor
- */
-recoil.ui.widgets.table.NumberColumn = function(key, name, opt_options) {
-    this.key_ = key;
-    this.options_ = opt_options || {};
-    this.name_ = name;
-    //, opt_maxB, opt_stepB, opt_editableB
-};
-/**
- * @private
- * @param {recoil.ui.WidgetScope} scope
- * @param {!recoil.frp.Behaviour<recoil.structs.table.TableCell>} cellB
- * @return {recoil.ui.Widget}
- */
-recoil.ui.widgets.table.NumberColumn.defaultWidgetFactory_ = function(scope, cellB) {
+export class NumberColumn extends ColumnBase<number> {
+    constructor(key: ColumnKey<number>, name: LabelType, opt_options?: StructType) {
+        super(key, name, NumberColumn.defaultWidgetFactory, opt_options)
+        //, opt_maxB, opt_stepB, opt_editableB
+    }
 
-    var frp = scope.getFrp();
-    var widget = new recoil.ui.widgets.NumberWidget(scope);
-    var value = recoil.frp.table.TableCell.getValue(frp, cellB);
-    var meta = recoil.frp.table.TableCell.getMeta(frp, cellB);
-    widget.attachStruct(recoil.frp.struct.extend(frp, meta, {value: value}));
-    return widget;
-};
+    static defaultWidgetFactory(scope: WidgetScope, cellB: Behaviour<TableCell<number>>): NumberWidget {
 
-/**
- * adds all the meta information that a column should need
- * this should at least include cellWidgetFactory
- * other meta data can include:
- *   headerDecorator
- *   cellDecorator
- * and anything else specific to this column such as options for a combo box
- *
- * @param {Object} curMeta
- * @return {Object}
- */
-recoil.ui.widgets.table.NumberColumn.prototype.getMeta = function(curMeta) {
-    var meta = {name: this.name_,
-                cellWidgetFactory: recoil.ui.widgets.table.NumberColumn.defaultWidgetFactory_};
-
-    goog.object.extend(meta, this.options_, curMeta);
-    return meta;
-};
-
-/**
- * @return {recoil.structs.table.ColumnKey}
- */
-recoil.ui.widgets.table.NumberColumn.prototype.getKey = function() {
-    return this.key_;
-};
+        let widget = new NumberWidget(scope);
+        widget.attachStruct(TableCellHelper.getMetaValue(cellB));
+        return widget;
+    }
+}

@@ -30,18 +30,18 @@ import {
     getTextContent, getVisibleRectForElement,
     removeChildren, removeNode,
     setTextContent
-} from "./dom/dom";
-import {EventType} from "./dom/eventtype";
-import {TagName} from "./dom/tags";
-import {EventHelper, type Unlistener} from "./eventhelper";
-import {Box} from "./dom/box";
-import {AnchoredPosition} from "./positioning/anchoredposition";
-import {Corner, Overflow, OverflowStatus, positionAtAnchor, positionAtCoordinate} from "./positioning/positioning";
-import {Coordinate} from "./dom/coordinate";
-import classlist, {setAll} from "./dom/classlist";
-import {AbstractPosition} from "./positioning/abstractposition";
-import {ViewPortPosition} from "./positioning/viewportposition";
-import {Popup} from "./popup";
+} from "./dom/dom.ts";
+import {EventType} from "./dom/eventtype.ts";
+import {TagName} from "./dom/tags.ts";
+import {EventHelper, type Unlistener} from "./eventhelper.ts";
+import {Box} from "./dom/box.ts";
+import {AnchoredPosition} from "./positioning/anchoredposition.ts";
+import {Corner, Overflow, OverflowStatus, positionAtAnchor, positionAtCoordinate} from "./positioning/positioning.ts";
+import {Coordinate} from "./dom/coordinate.ts";
+import classlist, {setAll} from "./dom/classlist.ts";
+import {AbstractPosition} from "./positioning/abstractposition.ts";
+import {ViewPortPosition} from "./positioning/viewportposition.ts";
+import {Popup} from "./popup.ts";
 import {DomObserver} from "./domobserver.ts";
 import {Message} from "./message.ts";
 

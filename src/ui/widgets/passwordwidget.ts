@@ -1,104 +1,106 @@
 import {Widget} from "./widget.ts";
 import {WidgetScope} from "./widgetscope.ts";
 import {InputWidget} from "./input.ts";
+import {createDom, setElementShown} from "../dom/dom.ts";
+import {TagName} from "../dom/tags.ts";
+import {WidgetHelper} from "../widgethelper.ts";
+import {Behaviour} from "../../frp/frp.ts";
+import {enable} from "../dom/classlist.ts";
+import {EventHelper} from "../eventhelper.ts";
+import {EventType} from "../dom/eventtype.ts";
+import {getOptionsGroup, Options} from "../frp/util.ts";
+import {BoolWithExplanation} from "../booleanwithexplain.ts";
+import {AttachType, extend} from "../../frp/struct.ts";
 
-/**
- *
- * @param {!recoil.ui.WidgetScope} scope
- * @param {boolean=} opt_autocomplete this has to be static since chrome doesn't update this when it changes
- * @constructor
- * @implements {recoil.ui.Widget}
- */
 export class PasswordWidget extends Widget {
-    private passwordInput_:InputWidget;
+    private readonly passwordInput_: InputWidget;
+    private readonly showIcon_: HTMLElement;
+    private readonly hideIcon_: HTMLElement;
+    private readonly show_: HTMLDivElement;
+    private readonly showB_: Behaviour<boolean>;
+    private readonly helper_: WidgetHelper;
+    private readonly autocomplete_: boolean;
+    private configB_?: Behaviour<{ enabled: BoolWithExplanation; show: boolean, editable:boolean}>;
 
-    constructor(scope:WidgetScope, opt_autocomplete = true) {
-        super(scope);
-    let frp = scope.getFrp();
-    
-    let passwordDiv = goog.dom.createDom('dive','goog-inline-block');
-    this.showIcon_ = goog.dom.createDom('i','fas fa-eye');
-    this.hideIcon_ = goog.dom.createDom('i','fas fa-eye-slash');
-    this.show_ = goog.dom.createDom(
-        'div', {class: 'recoil-password-show goog-inline-block'},
-        this.showIcon_, this.hideIcon_
-    );
-    this.containerDiv_ = goog.dom.createDom('div', {}, passwordDiv, this.show_);
+    /**
+     *
+     * @param scope
+     * @param opt_autocomplete is needed here instead of behaviour that sets it because the browser might autocomplete
+     * we have a chance to change it
+     */
+    constructor(scope: WidgetScope, opt_autocomplete = true) {
+        super(scope, createDom('div', 'recoil-password'));
 
-    this.passwordInput_ = new InputWidget(scope);
-    if (opt_autocomplete) {
-        this.passwordInput_.setType('password');
-    } else {
-        // you can't trust browsers not to autocomplete passwords, but sometimes it is necessary not to, for example
-        // user management screens where you are setting someone else's password
-        // to handle this just use an ordinary text field and change the font so its dots
+        let frp = scope.getFrp();
+        this.autocomplete_ = opt_autocomplete;
+        this.showIcon_ = createDom(TagName.I, 'fas fa-eye');
+        this.hideIcon_ = createDom(TagName.I, 'fas fa-eye-slash');
+        this.show_ = createDom(
+            'div', {class: 'recoil-password-show'},
+            this.showIcon_, this.hideIcon_
+        );
 
-    }
+        this.passwordInput_ = new InputWidget(scope);
+        this.getElement().appendChild(this.passwordInput_.getElement());
+        this.getElement().appendChild(this.show_);
+        this.setPasswordVisible(false);
+        if (opt_autocomplete) {
+            this.passwordInput_.setType('password');
+        } else {
+            this.passwordInput_.getInput().addEventListener("copy", evt => {
+                evt.preventDefault();
+            }, false);
+            // you can't trust browsers not to autocomplete passwords, but sometimes it is necessary not to, for example
+            // user management screens where you are setting someone else's password
+            // to handle this just use an ordinary text field and change the font so its dots
 
+        }
+        this.showB_ = scope.getFrp().createB(false);
+        this.helper_ = new WidgetHelper(scope, this.getElement(), this, () => {
+            let hasShow = this.helper_.isGood() && this.configB_!.get().show && this.configB_!.get().editable;
+            let show = this.helper_.isGood() && this.showB_.get();
+            setElementShown(this.showIcon_, hasShow && show);
+            setElementShown(this.hideIcon_, hasShow && !show);
+            this.setPasswordVisible(show);
+        });
 
-    let el = this.passwordInput_.getComponent().getElement();
-    if (!el) {
-        this.passwordInput_.getComponent().createDom();
-        el = this.passwordInput_.getComponent().getElement();
-    }
-    el.setAttribute('type', 'password');
-
-    let showB = scope.getFrp().createB(false);
-    this.showB_ = showB;
-    this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.component_, this, function () {
-        let showAny = this.helper_.isGood() && this.hasShowButtonB_.get();
-        let show = this.helper_.isGood() && this.showB_.get();
-        
-        goog.style.setElementShown(this.showIcon_, showAny && show);
-        goog.style.setElementShown(this.hideIcon_, showAny && !show);
-        this.passwordInput_.setType(show ? 'input' : 'password');
-    });
-
-    goog.events.listen(
-        this.show_, goog.events.EventType.MOUSEDOWN,
-        frp.accessTransFunc(function () {
-            showB.set(!showB.get());
+        EventHelper.listen(this.show_, EventType.CLICK, frp.accessTransFunc(() => {
+            this.showB_.set(!this.showB_.get());
         }, this.showB_));
-    
-    this.passwordInput_.getComponent().render(passwordDiv);
 
+    }
 
-};
+    setPasswordVisible(visible: boolean) {
+        if (this.autocomplete_) {
+            this.passwordInput_.setType(visible ? 'input' : 'password');
+        } else {
+            // todo stop copy from this field if its hidden
+            enable(this.passwordInput_.getInput(), "recoil-password-hide", !visible);
+        }
+    }
+    static options = Options('value', {
+        show:true, enabled:BoolWithExplanation.TRUE, editable:true,
+    })
+    attachStruct(data:AttachType<{ value: string,
+        show?:boolean,
+        immediate?:boolean,
+        enabled?:BoolWithExplanation }>) {
+        let frp = this.scope_.getFrp();
+        let bound = PasswordWidget.options.bind(frp, data);
+        // change the password to blank if the field is not editable otherwise the input widget will display it
+        let valueB = bound.value();
+        let editableB = bound.editable();
+        let safeValueB = frp.liftBI(
+            (val: string, editable) => editable ? val : "*********",
+            (val: string) => valueB.set(val), valueB, editableB);
 
-/**
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.PasswordWidget.prototype.getComponent = function() {
-    return this.component_;
-};
+        this.passwordInput_.attachStruct(extend(frp, data, {value: safeValueB}));
+        this.configB_ = getOptionsGroup<{
+            enabled:BoolWithExplanation,
+            show:boolean,
+            editable:boolean}>(bound, [bound.enabled, bound.show, bound.editable]);
 
-/**
- * @param {recoil.frp.Behaviour<string>|string} name
- * @param {recoil.frp.Behaviour<string>|string} value
- * @param {recoil.frp.Behaviour<!recoil.ui.BoolWithExplanation>|!recoil.ui.BoolWithExplanation} enabled
- */
-recoil.ui.widgets.PasswordWidget.prototype.attach = function(name, value, enabled) {
-    //this.passwordInput_.attachStruct({'name': name, 'value': value, 'enabled': enabled});
-    this.hasShowButtonB_ = this.scope_.getFrp().createB(false);
-    this.attachStruct({'name': name, 'value': value, 'enabled': enabled});
-    this.helper_.attach(this.showB_, this.hasShowButtonB_);
-};
+        this.helper_.attach(this.showB_, this.configB_);
+    }
+}
 
-/**
- *
- * @param {!Object| !recoil.frp.Behaviour<Object>} options
- */
-recoil.ui.widgets.PasswordWidget.prototype.attachStruct = function(options) {
-    let util = new recoil.frp.Util(this.scope_.getFrp());
-    this.hasShowButtonB_ = recoil.frp.struct.get('show', util.toBehaviour(options), false), 
-    this.passwordInput_.attachStruct(options);
-    this.helper_.attach(this.showB_, this.hasShowButtonB_);
-};
-
-/**
- * all widgets should not allow themselves to be flatterned
- *
- * @type {!Object}
- */
-
-recoil.ui.widgets.PasswordWidget.prototype.flatten = recoil.frp.struct.NO_FLATTEN;

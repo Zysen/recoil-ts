@@ -1,16 +1,16 @@
 import {
     DefaultPathCompressor,
     Path,
-    PathCompressor,
-    PathSerializer,
-    Schema,
-    ValueSerializor
-} from "./path";
-import {PathChangeMap} from "./changepathmap";
-import {isEqual} from "../util/object";
-import {StructType} from "../frp/struct";
-import {ChangeDb, ChangeSet, diff} from "./changeset";
-import {ChangeDbInterface} from "./changedb";
+    type PathCompressor,
+    type PathSerializer,
+    type ValueSerializor
+} from "./path.ts";
+import {PathChangeMap} from "./changepathmap.ts";
+import {isEqual} from "../util/object.ts";
+import {type StructType} from "../frp/struct.ts";
+import {ChangeSet, diff} from "./changeset.ts";
+import {ChangeDb, type ChangeDbInterface} from "./changedb.ts";
+import { type Schema } from "./schema.ts";
 
 export enum ChangeType  {
     SET= 0,
@@ -281,6 +281,14 @@ export class Reorder implements Change {
     private oldAfter_: Path|null;
     private position_: ChangePosition;
 
+    /**
+     *
+     * @param path the path item to move
+     * @param toPath the path to move the item to, if null then moves to first position if change position is AFTER, otherwise
+     *     moves it to the last position
+     * @param position either before or after
+     * @param oldAfter this is for undo information
+     */
     constructor(path: Path, toPath: Path|null, position: ChangePosition, oldAfter: Path|null) {
         this.path_ = path;
         this.toPath_ = toPath;
@@ -692,9 +700,10 @@ export class Add implements Change {
      * creates an inverse of the change
      */
     inverse(schema: Schema):Delete {
-        let db = new ChangeDb(schema);
+        /*todo let db = new ChangeDb(schema);
         this.applyToDb(db, schema);
-        return new Delete(this.path_, db.get(this.path_));
+        return new Delete(this.path_, db.get(this.path_));*/
+        return new Delete(this.path_, null);
     }
 
     /**
@@ -1106,7 +1115,7 @@ function deserializeObject_(val:any, schema:Schema, valSerializor:ValueSerializo
  */
 
 function serializeHelper_(leafSerializer:(p:Path, val:any)=>any, val:any, schema:Schema, valSerializor:ValueSerializor, path:Path):any {
-    if (!val || !schema.exists(path)) {
+    if (val == undefined || !schema.exists(path)) {
         return val;
     }
 
@@ -1118,7 +1127,7 @@ function serializeHelper_(leafSerializer:(p:Path, val:any)=>any, val:any, schema
 
     if (schema.isKeyedList(path)) {
         let res:any[] = [];
-        val.forEach((item:any) => {
+        for (let item of val) {
             let keyNames = schema.keys(path);
             let keys = [];
             for (let i = 0; i < keyNames.length; i++) {
@@ -1128,7 +1137,7 @@ function serializeHelper_(leafSerializer:(p:Path, val:any)=>any, val:any, schema
             }
 
             res.push(serializeHelper_(leafSerializer, item, schema, valSerializor, path.setKeys(keyNames, keys)));
-        });
+        }
         return res;
     }
 

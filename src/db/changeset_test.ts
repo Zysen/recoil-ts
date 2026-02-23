@@ -1,285 +1,176 @@
-import {assertEquals, assertFalse, assertObjectEquals, assertThrows, assertTrue} from "../test";
-import {StructType} from "../frp/struct";
-import { isEqual } from "../util/object";
-import {PathMap} from "./pathmap";
+import {assertEquals, assertFalse, assertObjectEquals, assertThrows, assertTrue} from "../test.ts";
+import {StructType} from "../frp/struct.ts";
+import { isEqual } from "../util/object.ts";
+import {PathMap} from "./pathmap.ts";
 import test from "node:test";
-import {DefaultPathCompressor, Path, PathItem, Schema} from "./path";
-import { ChangeDbInterface } from "./changedb";
-import {ChangeDb, ChangeSet, diff, DupPk} from "./changeset";
-import {Add, ChangePosition, ChangeType, Delete, deserializeChange, Move, Reorder, SetChange} from "./change";
+import {DefaultPathCompressor, Path} from "./path.ts";
+import {ChangeDb} from "./changedb.ts";
+import { ChangeSet, diff, DupPk} from "./changeset.ts";
+import {Add, ChangePosition, ChangeType, Delete, deserializeChange, Move, Reorder, SetChange} from "./change.ts";
+import {BasicSchema, FieldDef, ObjectDef} from "./basicschema.ts";
+import assert from "assert/strict";
 
-class MySchema implements Schema {
-    root: StructType = {
-        obj1 : {
-           
-            children : {
-                a : {},
-                b : {
-                    children: {
-                        c: {}
-                    }
-                }
-            }
-        },
-        a: {
-            children: {
-                b: {
-                    children : {
-                        c: {
-                            keys : ['k']
-                        },
-                        d:{}
-                    }
+function listener() {
+
+}
+
+const schema = new BasicSchema();
+const obj1:ObjectDef = {
+    type: "object",
+    fields: {
+        a: {type: "number"},
+        b: {
+            type: "object",
+            fields: { c: {type: "number"}}
+        }
+    }
+};
+const a:ObjectDef = {
+    type: "object",
+    fields: {
+        b: {
+            type: "object",
+            fields: {
+                c: {
+                    type: "object-list",
+                    keys: ["k"],
+                    fields: {k: {type: "number"}}
                 },
-                b1 : {}
+                d : {type:"number"}
             }
         },
-        adel: {
-            children: {
-                b: {
-                    children : {
-                        c: {
-                            keys : ['k'],
-                            children: {
-                                k : {},
-                                d: {
-                                    children : {
-                                        e: {}
-                                    }
-                                }
+        b1: {type: "number"}
+    }
+};
+
+schema.register("obj1", obj1);
+schema.register("a", a);
+
+schema.register("adel", {
+    type: "object",
+    fields: {
+        b: {
+            type: "object",
+            fields: {
+                c: {
+                    type: "object-list",
+                    keys: ['k'],
+                    fields: {
+                        d: {
+                            type: "object",
+                            fields: {
+                                e: {type: "number"}
                             }
                         }
                     }
-                },
-                b1 : {}
-            }
-        },
-
-        a1 : {
-            alias : '/test/a',
-            children: {
-                b1 : {}
-            }
-        },
-            
-        
-        e: {
-            children: {
-                f: {
-                    children : {
-                        g: {
-                            keys : ['k']
-                        }
-                    }
                 }
-            }
-        },
-
-        key1: {
-            children : {
-                k: {},
-                v: {}
             },
-            keys : ['k']
         },
-        test: {
-            children : {
-            }
-        },
-        full: {
-            children : {
-                k1 : {
-                    keys:['k'],
-                    children: {
-                        a :{},
-                        k :{}
-                    }
-                },
+        b1: {type: "number"}
+    }
+});
 
-                a: {
-                    children: {
-                        v: {},
-                        v2: {},
-                        list: {
-                            children: {
-                                k: {},
-                                v: {},
-                                v2: {}
-                            },
-                            keys: ['k']
-                        }
-                    }
-                }
+schema.registerAlias(Path.fromString("/test/a"), Path.fromString("/a"), BasicSchema.makeSimpleFilter(Path.fromString("/a"), "b1"));
+schema.register("e", {
+   type: "object",
+   fields: {
+       f: {
+           type: "object",
+           fields: {
+               g: {
+                   type: "object-list",
+                   keys: ['k'], fields: {k: {type: "number"}}
+               }
+           }
+       }
+   }
+});
+
+schema.register("key1", {
+   type: "object-list",  keys: ['k'],
+   fields: {
+       k: {type: "number"},
+       v: {type: "number"}
+   }
+});
+schema.register("full", {
+    type: "object",
+    fields: {
+        k1: {
+            type: "object-list", keys: ['k'],
+            fields: {
+                k: {type: "number"},
+                a: {type: "number"}
             }
         },
-        'ordered': {
-            children: {
-                k :{},
-                v :{},
-            }
-        },
-        'list-a': {
-            children: {
-                k :{},
-                v :{},
-                c : {
-                    children: {
-                        t : {}
-                    }
-                }
-                
-            },
-            keys: ['k']
-        },
-        'cont' : {
-            children: {
-                c1: {
-                    children: {
-                        c2:{}
-                    }
-                }
-            }
-        },
-        'named-a': {
-            alias : '/full/a',
-            children: {
-                v: {},
+        a: {
+            type: "object",
+            fields: {
+                v: {type: "number"},
+                v2: {type: "number"},
                 list: {
-                    children: {
-                        k: {},
-                        v: {}
-                    },
-                    keys: ['k']
+                    type: "object-list", keys: ['v'],
+                    fields: {
+                        k: {type: "number"},
+                        v: {type: "number"},
+                        v2: {type: "number"}
+                    }
                 }
             }
         }
-            
-    };
-    
+    }
+});
 
-                
-    meta1(path:Path, opt_keys?:any[]) {
-        let keys = opt_keys || [];
-        let parts = path.parts();
-        let cur = this.root[parts[0]];
-        if (cur && cur.keys) {
-            cur.keys.forEach(function (k: any) {
-                keys.push(k);
-            });
-        }
-        
-        for (let i = 1; i < parts.length && cur; i++) {
-            let part = parts[i];
-            cur = cur.children && cur.children[part];
-
-            if (cur && cur.keys) {
-                for (let k of cur.keys) {
-                    keys.push(k);
-                }
-            }
-
-        }
-        return cur;
+schema.register("ordered", {
+    type: 'object',
+    fields: {
+        k: {type: "number"},
+        v: {type: "number"}
     }
-    meta(path:Path, opt_keys:any[]) {
-        let parts = path.parts();
-        let cur = this.root;
-        for (let i = 0; i < parts.length && cur; i++) {
-            let part = parts[i];
-            cur = cur[part].children;
-           
-        }
-        return cur;
-    };
-    applyDefaults(path:Path, db:ChangeDbInterface) {}
-    children(path:Path) {
-        let parts = path.parts();
-        let cur = this.root;
-        for (let i = 0; i < parts.length && cur; i++) {
-            cur = cur[parts[i]].children;
-        }
-        if (cur === undefined) {
-            return [];
-        }
-        return Object.keys(cur);
-    }
-    exists(path:Path):boolean {
-        return this.meta1(path) ? true : false;
-    }
-    keys(path:Path) {
-        let meta = this.meta1(path);
-        let k = meta ? meta.keys  : [];
-        return k === undefined ? [] : k;
-    }
-    createKeyPath (path:Path, obj:StructType):Path {
-        let keys = this.keys(path);
-        if (!obj) {
-            return path;
-        }
-        let keyValues:any[] = [];
-        
-        for (let k of keys){
-            keyValues.push(obj[k]);
-        }
-        return path.setKeys(keys, keyValues);
-    }
-    isPartial(path:Path) {
-        return false;
-    }
-    absolute (path:Path):Path {
-        if (path.parts()[0] === 'full' || path.parts()[0] === 'test') {
-            return path;
-        }
-        if (path.parts()[0] === 'named-a') {
-            return Path.fromString('full/a');
-        }
-
-        let item = this.root[path.parts()[0]];
-        if (item && item.alias) {
-            let prefix = Path.fromString(item.alias);
-            let parts = prefix.items();
-            let pathParts = path.items();
-            for (let i = 1; i < pathParts.length; i++) {
-                parts.push(pathParts[i]);
-            }
-            
-            return new Path(parts);
-        }
-        return path.prepend([new PathItem('test',[],[])]);
-    }
-        
-    isCreatable(path:Path):boolean {
-        return true;
-    }
-    isKeyedList(path:Path):boolean {
-        let keys:any[] = [];
-        let meta = this.meta1(path, keys);
-        if (meta && meta.keys && meta.keys.length > 0) {
-            return keys.length > path.keys().length;
-        }
-        return false;
-    }
-        
-    isLeaf (path:Path) {
-        return this.children(path).length === 0;
-    }
-    isOrderedList(path:Path){
-        let parts = path.parts();
-        for (let i = 0; i < parts.length; i++) {
-            if (parts[i] === 'ordered') {
-                return true;
+});
+const list_a:FieldDef = {
+    type: 'object-list', keys: ['k'],
+    fields: {
+        v: {type: "number"},
+        c: {
+            type: "object",
+            fields: {
+                t: {type: "number"}
             }
         }
-        return false;
     }
-    
-}
-let schema = new MySchema();
 
-schema.root.test.children.obj1 = schema.root.obj1;
-schema.root.test.children.cont = schema.root.cont;
-schema.root.test.children['list-a'] = schema.root['list-a'];
-schema.root.test.children.a = schema.root.a;
+};
+
+schema.register("list-a", list_a);
+
+const cont:ObjectDef = {
+    type: "object",
+    fields: {
+        c1: {
+            type: "object",
+            fields: {
+                c1: {type: "number"},
+            }
+        }
+    }
+};
+
+schema.register("cont", cont);
+schema.registerAlias(Path.fromString("/name-a"), Path.fromString("/full/a"), BasicSchema.makeExclusiveFilter(
+    Path.fromString("/name-a/list/k"),  Path.fromString("/name-a/list/v"), Path.fromString("/name-a/v")
+));
+
+schema.register("test", {
+    type: "object",
+    fields: {
+        obj1,
+        cont,
+        a,
+        'list-a' : list_a,
+    }
+
+});
 
 function assertSameObjects (expected:any, actual:any) {
  
@@ -326,18 +217,23 @@ test("SetList", () => {
 });
     
 test("DbNonExistantDesendant", () => {
+    let removers: (() => void)[] = [];
     let path = Path.fromString('/obj1');
     let pathc = Path.fromString('/obj1/b/c');
 
     let testee = new ChangeDb(schema);
 
 
-    assertObjectEquals([path],testee.setRoot(path, {}));
-    assertObjectEquals([pathc],testee.setRoot(pathc, null));
+    assertObjectEquals([path],testee.set(path, {}));
+    assertObjectEquals([pathc],testee.set(pathc, null));
 
     assertObjectEquals({}, testee.get(path));
-    assertObjectEquals([path, pathc],testee.setRoot(pathc, 1));
+    assertObjectEquals([path, pathc],testee.set(pathc, 1));
     assertObjectEquals({b:{c:1}}, testee.get(path));
+    for (let r of removers) {
+        r();
+    }
+    assert.deepEqual(testee.unsafeGet(new Path([])), {});
 
 });
     
@@ -561,10 +457,12 @@ test("ChangeDbSet", () => {
     let contPath = Path.fromString('cont');
     let namedPath = Path.fromString('named-a');
     let listA = Path.fromString('list-a');
-    
-    assertObjectEquals([fullPath],testee.setRoot(fullPath, {v : 1, v2: 2, list : [{k:1, v:1, v2:2},{k:2, v:2, v2: 2}]}));
-    assertSameObjects([fullPath, namedPath],testee.setRoot(namedPath, {v : 10, list : [{k:1, v:10},{k:2, v:20}]}));
-    testee.setRoot(contPath, {});
+    let removers: (() => void)[] = [];
+
+    removers.push(testee.addReference(fullPath, listener));
+    assertObjectEquals([fullPath],testee.set(fullPath, {v : 1, v2: 2, list : [{k:1, v:1, v2:2},{k:2, v:2, v2: 2}]}));
+    assertSameObjects([fullPath, namedPath],testee.set(namedPath, {v : 10, list : [{k:1, v:10},{k:2, v:20}]}));
+    testee.set(contPath, {});
 
 
     assertObjectEquals([fullPath,namedPath],testee.getRoots(fullPath.appendName('v')));
@@ -572,15 +470,15 @@ test("ChangeDbSet", () => {
     assertObjectEquals({v : 10, list : [{k:1, v:10},{k:2, v: 20}]}, testee.get(namedPath));
     assertObjectEquals({}, testee.get(contPath));
 
-    testee.setRoot(fullPath, {v : 1, v2: 2, list : [{k:1, v:1, v2:2},{k:2, v:2, v2: 2}]});
+    testee.set(fullPath, {v : 1, v2: 2, list : [{k:1, v:1, v2:2},{k:2, v:2, v2: 2}]});
     assertObjectEquals({v : 1, v2: 2, list : [{k:1, v:1, v2:2},{k:2, v: 2, v2: 2}]}, testee.get(fullPath));
     assertObjectEquals({v : 1, list : [{k:1, v:1},{k:2, v: 2}]}, testee.get(namedPath));
 
 
     // resolve full path that does not exist
-    testee.setRoot(listA, [{k:1, v:1}, {k:2, v:2}]);
+    testee.set(listA, [{k:1, v:1}, {k:2, v:2}]);
     assertObjectEquals([{k:1, v:1}, {k:2, v:2}], testee.get(listA));
-    testee.setRoot(listA, [{k:1, v:10}, {k:2, v:20}]);
+    testee.set(listA, [{k:1, v:10}, {k:2, v:20}]);
     assertObjectEquals([{k:1, v:10}, {k:2, v:20}], testee.get(listA));
     
     // now apply some changes
@@ -618,10 +516,14 @@ test("ChangeDbSet", () => {
 
     testee.set(Path.fromString('a'),{b:null});
     assertObjectEquals({b:null}, testee.get(Path.fromString('a')));
+    for (let r of removers) {
+        r();
+    }
 });
 
 
 test("ChangeDbReplace", () => {
+    let removers: (() => void)[] = [];
 
     let testee1 = new ChangeDb(schema);
     let testee2 = new ChangeDb(schema);
@@ -634,7 +536,7 @@ test("ChangeDbReplace", () => {
     let v1Path = key1Path.appendName('v');
     
     
-    assertObjectEquals([fullPath],testee1.setRoot(fullPath,obj1));
+    assertObjectEquals([fullPath],testee1.set(fullPath,obj1));
     assertObjectEquals(obj1, testee1.get(fullPath));
     assertObjectEquals(null, testee2.get(fullPath));
     testee2.replaceDb(testee1);
@@ -643,6 +545,10 @@ test("ChangeDbReplace", () => {
     assertObjectEquals(obj1, testee1.get(fullPath));
     assertObjectEquals(obj3, testee1.get(fullPath));
     assertObjectEquals(obj2, testee2.get(fullPath));
+
+    for (let r of removers) {
+        r();
+    }
 
 });
 
@@ -668,6 +574,7 @@ test("PathMove", () => {
 });
 
 test("Suffix", () => {
+    let removers: (() => void)[] = [];
     let a = Path.fromString('a/b/c').setKeys(['f','g'],[1,2]).appendNames(['d','e']);
     let pre = Path.fromString('a/b/c');
     let x = Path.fromString('x/y');
@@ -681,6 +588,9 @@ test("Suffix", () => {
     assertObjectEquals(x.appendNames(['b']),
                        x.appendSuffix(Path.fromString('a/b').getSuffix(Path.fromString('a'))));
 
+    for (let r of removers) {
+        r();
+    }
 });
     
 test("PathMap", () => {
@@ -732,6 +642,7 @@ test("PathMap", () => {
 
     assertSameObjects([1,2,44], testee.getAncestors(ab.setKeys(['k'],[1])));
     assertSameObjects([1,2,3], testee.getAncestors(abc));
+
 });
 
 test("MergeChanges", () => {
@@ -741,6 +652,7 @@ test("MergeChanges", () => {
     let namedPath = Path.fromString('named-a');
     let listA = Path.fromString('list-a');
     let fullListA = Path.fromString('test/list-a');
+    let removers: (() => void)[] = [];
 
     // set operations
     // Set(a), Set(a) -> Set(a)
@@ -949,6 +861,10 @@ test("MergeChanges", () => {
                         fullListA.setKeys(['k'], [3]))
         ]));
 
+    for (let r of removers) {
+        r();
+    }
+    assert.deepEqual(testee.unsafeGet(new Path([])), {});
 
 });
 

@@ -1,4 +1,4 @@
-import {Behaviour, type BehaviourList, BStatus, Frp, isStatus, type Status} from "./frp.ts";
+import {Behaviour, type BehaviourList, type BehaviourList1, BStatus, Frp, isStatus, type Status} from "./frp.ts";
 import {addProps, uniq} from "../util/object.ts";
 import {ColumnKey} from "../structs/table/columnkey.ts";
 
@@ -125,12 +125,12 @@ export function getWithStatusIfNotGood<T>(name:string, value:StructBehaviour, op
  * @param var_extensionsB
  * @return
  */
-export function extend(frp:Frp, structB:StructBehaviour|StructType, ...var_extensionsB:StructBehaviourOrTypeList ):Behaviour<StructType> {
+export function extend<Type extends StructType>(frp:Frp, structB:StructBehaviour|StructType, ...var_extensionsB:StructBehaviourOrTypeList ):Behaviour<Type> {
 
-    const calc = (...args:any[]):StructType=> {
+    const calc = (...args:any[]):Type=> {
         let res = {};
         addProps(res, ...args);
-        return res;
+        return res as Type;
     }
 
     const inv = (val:StructType, ...args:Behaviour<any>[])=> {
@@ -149,7 +149,7 @@ export function extend(frp:Frp, structB:StructBehaviour|StructType, ...var_exten
 
         }
     }
-    return frp.liftBI(calc, inv, flatten(frp, structB), ...var_extensionsB.map(b => flatten(frp, b)))
+    return frp.liftBI(calc, inv, flatten(frp, structB), ...var_extensionsB.map(b => flatten(frp, b)));
 }
 
 
@@ -325,7 +325,7 @@ export function flatten (frp:Frp, structB:StructBehaviourOrType):StructBehaviour
     }
     return frp.liftBI(
         () => flattenRec_(structB, []),
-        (val: StructType) => setFlattenRec_(structB, val, []), ...args);
+        (val: StructType) => setFlattenRec_(structB, val, []), ...args as BehaviourList1);
 }
 
 /**
@@ -398,6 +398,7 @@ export function create(frp: Frp, struct:StructType) {
             args.push(obj);
         }
     }
+    Frp.assertHasOneBehaviour(args);
     return frp.liftBI(calc, inv, ...args);
 }
 

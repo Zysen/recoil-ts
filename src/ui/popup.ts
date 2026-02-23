@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {PopupBase, Type} from "./popupbase";
-import {AbstractPosition} from "./positioning/abstractposition";
-import {Corner} from "./positioning/positioning";
-import {Box} from "./dom/box";
-import {setElementShown} from "./dom/dom";
+import {PopupBase, Type} from "./popupbase.ts";
+import {AbstractPosition} from "./positioning/abstractposition.ts";
+import {Corner} from "./positioning/positioning.ts";
+import {Box} from "./dom/box.ts";
+import {setElementShown} from "./dom/dom.ts";
 
 export class Popup extends PopupBase {
     private popupCorner_: Corner;

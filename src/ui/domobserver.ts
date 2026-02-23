@@ -1,5 +1,5 @@
-import {Behaviour} from "../frp/frp";
-import {contains} from "./dom/dom";
+import {Behaviour} from "../frp/frp.ts";
+import {contains} from "./dom/dom.ts";
 
 type CallbackFn = (exists:boolean) => void;
 type EntryType = {callbacks: CallbackFn[], state: boolean};

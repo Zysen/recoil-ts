@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Corner, positionAtAnchor} from "./positioning";
-import {AbstractPosition} from "./abstractposition";
-import {Box} from "../dom/box";
-import {Size} from "../dom/size";
+import {Corner, positionAtAnchor} from "./positioning.ts";
+import {AbstractPosition} from "./abstractposition.ts";
+import {Box} from "../dom/box.ts";
+import {Size} from "../dom/size.ts";
 
 export class AnchoredPosition extends AbstractPosition {
     readonly element: Element;

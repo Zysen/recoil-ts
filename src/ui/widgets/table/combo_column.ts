@@ -16,14 +16,16 @@ import {ColumnKey} from "../../../structs/table/columnkey";
 import {Column} from "./column";
 import {WidgetScope} from "../widgetscope";
 import {TableCell} from "../../../structs/table/table";
+import {Message} from "../../message.ts";
+import {ComboWidget} from "../combowidget.ts";
 
-class InputComboColumn<Type> implements Column {
+class InputComboColumn<Type> implements Column<Type> {
     private readonly key_: ColumnKey<Type>;
-    private readonly name_: string;
+    private readonly name_: string|Message;
     private readonly list_: BehaviourOrType<Type[]>;
     private readonly options_: StructType;
 
-    constructor(key: ColumnKey<Type>, name: string, list: BehaviourOrType<Type[]>, opt_options: BehaviourOrType<StructType>) {
+    constructor(key: ColumnKey<Type>, name: string|Message, list: BehaviourOrType<Type[]>, opt_options: BehaviourOrType<StructType>) {
         this.key_ = key;
         this.name_ = name;
         this.list_ = list;
@@ -48,7 +50,7 @@ class InputComboColumn<Type> implements Column {
             input.forceSetValue(v);
         });
 
-        widget.attachStruct(extend(frp, metaData, {value: value}));
+        widget.attachStruct(extend(frp, metaData, {value: value}) as any);
         input.attachStruct(extend(frp, metaData, {value: value}) as Behaviour<any>);
 
         return widget;

@@ -1,7 +1,7 @@
 import assert from 'assert/strict';
 import test from 'node:test';
 
-import {SerializedMap, SerializedSet} from "./serialized_collections";
+import {SerializedMap, SerializedSet} from "./serialized_collections.ts";
 
 test("map", () => {
     let map = new SerializedMap<number[], number>(v => v.join());

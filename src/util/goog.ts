@@ -1,5 +1,5 @@
 import {Message} from "../ui/message.ts";
-import {StructType} from "../frp/struct.ts";
+import {type StructType} from "../frp/struct.ts";
 
 /**
  * This is a "fixed" version of the typeof operator.  It differs from the typeof

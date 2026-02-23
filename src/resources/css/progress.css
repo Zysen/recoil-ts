@@ -1,0 +1,46 @@
+.recoil-progress-bar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: #ddd;
+    overflow: hidden;
+    min-height: 30px;
+    border-radius: 3px;
+    position: relative;
+}
+.recoil-progress-bar-done .recoil-progress-bar-thumb {
+    animation: none;
+}
+.recoil-progress-bar-thumb {
+    width: 0;
+    flex-grow: 1;
+    background-color: #5b5bfc; /* Primary color */
+    background-image: linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.3) 25%,
+            transparent 25%,
+            transparent 50%,
+            rgba(255, 255, 255, 0.3) 50%,
+            rgba(255, 255, 255, 0.3) 75%,
+            transparent 75%,
+            transparent
+    ); /* Creates the candy stripes */
+    background-size: 40px 40px; /* Controls stripe size */
+    animation: move-stripes 1s linear infinite; /* Animates the stripes */
+    position: relative;
+}
+.recoil-progress-bar-text {
+    position: absolute;
+    overflow: hidden;
+    width: 100%;
+    white-space: nowrap;
+    text-align: center;
+    mix-blend-mode: difference;
+    font-weight: 500;
+    color: white;
+
+}
+@keyframes move-stripes {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 0; } /* Moves the background horizontally */
+}

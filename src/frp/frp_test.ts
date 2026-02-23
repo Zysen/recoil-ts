@@ -80,8 +80,8 @@ test("DetachWhileInTrans", ()=> {
     let tm = frp.tm();
 
     let b = frp.createB(2);
-    let c = frp.liftBI<number>(
-        function (v: number): number {return v},
+    let c = frp.liftBI(
+        (v: number): number =>  {return v},
         function (v:number) {
             b.set(v);
             tm.detach(c)
@@ -508,8 +508,8 @@ test("Const",()=>{
     let count = 0;
 
     let one = frp.createConstB(1);
-    let two = frp.liftB(function(a) {return a + 1;}, one);
-    let three = frp.liftB(function(a) {count++;return a + 1;},two);
+    let two = frp.liftB<number>((a) => {return a + 1;}, one);
+    let three = frp.liftB((a)=> {count++;return a + 1;},two);
     assert.equal(0, count, 'zero fire');
 
 
@@ -743,8 +743,8 @@ test("DependancyRemoved",()=>{
     let tm = frp.tm();
     let count = 0;
     let one = frp.createB(1);
-    let two = frp.liftB(function(a) {count++;return a + 1;},one);
-    let three = frp.liftB(function(a) {return a + 1;},two);
+    let two = frp.liftB((a)=> {count++;return a + 1;},one);
+    let three = frp.liftB((a)=> {return a + 1;},two);
     let four = frp.liftB(function(a) {return a + 1;},three);
 
     tm.attach(four);
@@ -899,7 +899,7 @@ test("OnUpDirtyDown ",()=>{
     let count1 = 0;
     let zeroB = frp.createB(1);
     let oneB = frp.liftBI(
-        function (this: Behaviour<number>, v:number) {
+         (v)=> {
             count1++;
             return v;
         }, doNothingInv, zeroB);
@@ -911,7 +911,7 @@ test("OnUpDirtyDown ",()=>{
             oneB.set(2);
         }, oneB);
         return null;
-    },doNothingInvNull, threeB);
+    },doNothingInvNull as any, threeB);
                         
     let lastB = frp.liftB(function () {
         count++;
@@ -1087,10 +1087,6 @@ test("Acess",()=>{
 
 
     assert.equal(10, l2B.unsafeMetaGet().get());
-
-
-
-
 });
 
 test("Continue",()=>{

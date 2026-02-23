@@ -1,12 +1,23 @@
+import { BooleanColumn } from "./boolean_column.ts";
+import { NumberColumn } from "./number_column.ts";
+import {ColumnKey} from "../../../structs/table/columnkey.ts";
+import {LabelType} from "./column.ts";
+import {StructType} from "../../../frp/struct.ts";
+import { StringColumn } from "./string_column.ts";
+import { SelectColumn } from "./select_column.ts";
+import { createDom } from "../../dom/dom.ts";
+import { RenderedDecorator } from "../../decorator.ts";
+import { TableCellHelper } from "../../../frp/table.ts";
 
-const typeFactories = {"int": function(meta) {
-    return new NumberColumn(meta);
-}, "string": function (meta) {
-    return new StringColumn(meta);
-}, "boolean": function (meta) {
-    return new BooleanColumn(meta);
-}, "select": function (meta) {
-    return new SelectColumn(meta);
+const typeFactories = {
+    "int": (columnKey:ColumnKey<number>, name: LabelType, meta:StructType)=> {
+    return new NumberColumn(columnKey, name, meta);
+}, "string": function (columnKey:ColumnKey<string>, name: LabelType, meta:StructType) {
+    return new StringColumn(columnKey, name, meta);
+}, "boolean": function (columnKey:ColumnKey<boolean>, name: LabelType, meta:StructType) {
+    return new BooleanColumn(columnKey, name, meta);
+}, "select": function (columnKey:ColumnKey<number>, name: LabelType, meta:StructType) {
+    return new SelectColumn(columnKey, name, meta);
 }};
 
 var asyncTestCase = goog.testing.AsyncTestCase.createAndInstall();
@@ -29,7 +40,7 @@ function waitFor(test, start) {
 
 function testDecoratorAndWidgetChange01() {
     shared = {
-        container : goog.dom.createDom('div', {id: 'foo'}),
+        container : createDom('div', {id: 'foo'}),
         scope : new recoil.ui.WidgetScope()
     };
     var frp = shared.scope.getFrp();
@@ -91,9 +102,9 @@ function testDecoratorAndWidgetChange02() {
     var frp = shared.scope.getFrp();
 
     var decorator = function () {
-        return new recoil.ui.RenderedDecorator(
+        return new RenderedDecorator(
             decorator,
-            goog.dom.createDom('td', {style:'background:red'}));
+            createDom('td', {style:'background:red'}));
     };
     frp.accessTrans(function () {
         var mtable = shared.tableB.get().unfreeze();
@@ -109,13 +120,13 @@ function testDecoratorAndWidgetChange03() {
     var frp = shared.scope.getFrp();
     // change both decorator and widget
     var decorator = function () {
-        return new recoil.ui.RenderedDecorator(
+        return new RenderedDecorator(
             decorator,
-            goog.dom.createDom('td', {style:'background:green'}));
+            createDom('td', {style:'background:green'}));
     };
     var widgetFactory = function (scope, cellB) {
         var widget = new recoil.ui.widgets.LabelWidget(scope);
-        widget.attach(recoil.frp.table.TableCell.getValue(frp, cellB));
+        widget.attach(TableCellHelper.getValue(frp, cellB));
         return widget;
     };
     frp.accessTrans(function () {
@@ -141,7 +152,7 @@ function testDecoratorAndWidgetChange04() {
 
     var widgetFactory = function (scope, cellB) {
         var widget = new recoil.ui.widgets.LabelWidget(scope);
-        widget.attach(recoil.frp.table.TableCell.getValue(frp, cellB));
+        widget.attach(TableCellHelper.getValue(frp, cellB));
         return widget;
     };
     frp.accessTrans(function () {
@@ -159,7 +170,7 @@ function testDecoratorAndWidgetChange04() {
     waitFor(findTdColor('green', findInput));
     asyncTestCase.waitForAsync('test show table');
     
-};
+}
 
 function testDecoratorAndWidgetChange05() {
     var frp = shared.scope.getFrp();
@@ -200,9 +211,9 @@ function testDecoratorAndWidgetChange06() {
         return widget;
     };
     var decorator = function () {
-        return new recoil.ui.RenderedDecorator(
+        return new RenderedDecorator(
             decorator,
-            goog.dom.createDom('td', {style:'background:yellow'}));
+            createDom('td', {style:'background:yellow'}));
     };
     decorator.name = 'fred';
     frp.accessTrans(function () {
@@ -230,7 +241,7 @@ function testDecoratorAndWidgetChange08() {
 }
 function testOrderChange01() {
     shared = {
-        container : goog.dom.createDom('div', {id: 'foo'}),
+        container : createDom('div', {id: 'foo'}),
         scope : new recoil.ui.WidgetScope()
     };
     var frp = shared.scope.getFrp();
@@ -341,7 +352,7 @@ function testOrderChange03() {
 
 function testColumnChange01() {
     shared = {
-        container : goog.dom.createDom('div', {id: 'foo'}),
+        container : createDom('div', {id: 'foo'}),
         scope : new recoil.ui.WidgetScope()
     };
     var frp = shared.scope.getFrp();

@@ -1,8 +1,8 @@
-import {ColumnKey} from "./columnkey";
+import {ColumnKey} from "./columnkey.ts";
 import test from "node:test";
-import {MutableTable, MutableTableRow, TableRow} from "./table";
-import {assertEquals, assertObjectEquals} from "../../test";
-import {Filter} from "./filter";
+import {MutableTable, MutableTableRow, TableRow} from "./table.ts";
+import {assertEquals, assertObjectEquals} from "../../test.ts";
+import {Filter} from "./filter.ts";
 
 const COL_A = new ColumnKey("a");
 const COL_B = new ColumnKey<number>("b");

@@ -1,10 +1,6 @@
-import {compareAll, isEqual} from "../util/object";
-import {StructType} from "../frp/struct";
-import {ChangePosition} from "./change";
-import {ChangeDbInterface} from "./changedb";
-
-
-
+import {compare, compareAll, isEqual} from "../util/object.ts";
+import {type StructType} from "../frp/struct.ts";
+import {type Schema} from "./schema.ts";
 
 /**
  * allows override to serialize/deserialize values, eg buffers
@@ -46,76 +42,27 @@ export class DefaultPathCompressor implements PathCompressor<string> {
 
 
 }
-export interface Schema {
-    /**
-     * @return the children
-     */
-    children(path: Path): string[];
-
-    isOrderedList(path: Path): boolean;
-
-    /**
-     * @return true if the user has to create
-     */
-    isCreatable(path: Path): boolean;
-
-    /**
-     * set up container after item is added
-     */
-    applyDefaults(path: Path, db:ChangeDbInterface): void;
-
-    /**
-     * this is used to filter out items that may exist in the aboslute path
-     * but not in the named path
-     *
-     * @return true if the path exist for this path
-     */
-    exists(path: Path): boolean;
-
-    /**
-     * this is a partial list and may set only the keys in this path
-     * this does not mean the other items get deleted
-     * @return true if the path exist for this path
-     */
-    isPartial(path: Path): boolean;
-
-    /**
-     * returns a list of keys at the path level not parent keys
-     * @param {recoil.db.ChangeSet.Path} path
-     * @return {!Array<string>} keys
-     */
-    keys(path: Path): string[];
-
-    isLeaf(path: Path): boolean;
-
-    /**
-     * @return true if the path is a list of object and the keys are not specified, else false
-     */
-    isKeyedList(path: Path): boolean;
-
-    /**
-     * converts a path into an absolute path this solve
-     * so you can have different paths for the same thing
-     *
-     */
-    absolute(path: Path): Path;
-
-    createKeyPath(path:Path, obj:any): Path;
-}
 
 export class PathItem {
     private readonly name_: string;
     private readonly keys_: any[];
     private readonly keyNames_: string[];
+    private readonly indexed_:boolean;
+    private readonly indexes_: number[]; // this is a list because you can have a list of lists etc each index goes down 1
 
-    constructor(name: string, keyNames: string[], keys: any[]) {
+    constructor(name: string, index: number[]);
+    constructor(name: string, keyNames: string[], keys: any[]);
+    constructor(name: string, keyNames: string[]|number[], keys?: any[]) {
         this.name_ = name;
-        this.keys_ = keys;
-        this.keyNames_ = keyNames;
-    };
+        this.keys_ = keys || [];
+        this.indexed_ = !!keys && keyNames.length > 0;
+        this.keyNames_ = keys ? keyNames as string[] :  [] ;
+        this.indexes_ = keys ? [] : keyNames as number[];
+    }
+
     name():string {
         return this.name_;
-    };
+    }
 
     compare(other: PathItem): number {
         let res = this.name_.localeCompare(other.name_);
@@ -127,8 +74,14 @@ export class PathItem {
         if (this.keys_.length != other.keys_.length) {
             return this.keys_.length - other.keys_.length;
         }
+
+        res = compare(this.indexes_, other.indexes_);
+        if (res !== 0) {
+            return res;
+        }
+
         return compareAll([{x: this.keys_, y: other.keys_}, {x: this.keyNames_, y: other.keyNames_}]) as number;
-    };
+    }
 
     keyMatch(obj: StructType): boolean {
         if (!obj) {
@@ -144,7 +97,7 @@ export class PathItem {
 
     keys(): any[] {
         return this.keys_;
-    };
+    }
 
     unsetKeys(): PathItem {
         return new PathItem(this.name_, [], []);
@@ -154,13 +107,38 @@ export class PathItem {
         return new PathItem(this.name_, this.keyNames_, keys);
     }
 
-    /**
+    appendIndex(index:number): PathItem {
+        let newIndex = [...this.indexes_, index];
+        return new PathItem(this.name_, newIndex);
+    }
+    appendIndexes(indexes:number[]): PathItem {
+        let newIndex = [...this.indexes_, ...indexes];
+        return new PathItem(this.name_, newIndex);
+    }
+
+    setIndex(index:number): PathItem {
+        if (this.indexes_.length == 0) {
+            throw new Error("no existing index");
+        }
+        let newIndex = [...this.indexes_]
+        newIndex.pop();
+        newIndex.push(index);
+        return new PathItem(this.name_, newIndex);
+    }
+    getIndexes():number[]  {
+        return this.indexes_;
+    }
+
+     /**
      * @return {!Array<?>}
      */
     keyNames(): string[] {
         return this.keyNames_;
     }
 
+    getLastIndex() {
+        return this.indexes_.length === 0 ? null :this.indexes_[this.indexes_.length -1];
+    }
 }
 
 /**
@@ -212,10 +190,7 @@ export class Path implements Iterable<PathItem>{
     /**
      * if from is an ansestor of this path changes the from part to the
      * to part
-     * @param {!recoil.db.ChangeSet.Path} from
-     * @param {!recoil.db.ChangeSet.Path} to
-     * @return {!recoil.db.ChangeSet.Path}
-     */
+         */
     move(from: Path, to: Path): Path {
         if (!from.isAncestor(this, true)) {
             return this;
@@ -230,8 +205,20 @@ export class Path implements Iterable<PathItem>{
         if (items.length > 0 && lastTo) {
             let lastFrom = items[items.length - 1];
             let lastMe = this.items_[items.length - 1];
+
             if (lastMe.keys().length > 0 && lastFrom.keys().length === 0) {
                 parts[parts.length - 1] = new PathItem(lastTo.name(), lastMe.keyNames(), lastMe.keys());
+            }
+            else {
+                let meIndexes = lastMe.getIndexes();
+                if (meIndexes.length > 0) {
+                    let newIndexes:number[] = [];
+                    let toIndexes = lastTo.getIndexes();
+                    for (let i = 0; i < meIndexes.length && i < toIndexes.length; i++) {
+                        newIndexes.push(toIndexes[i]);
+                    }
+                    parts[parts.length - 1] = new PathItem(lastTo.name(), newIndexes);
+                }
             }
         }
         for (let i = from.items_.length; i < this.items_.length; i++) {
@@ -314,14 +301,43 @@ export class Path implements Iterable<PathItem>{
             let myItem = this.items_[i];
             let otherItem = path.items_[i];
 
-            if (i + 1 === this.items_.length && myItem.keys().length === 0 && otherItem.keys().length > 0) {
-                return myItem.name() === otherItem.name();
+            if (i + 1 === this.items_.length) {
+                // last one
+
+                if (myItem.name() !== otherItem.name()) {
+                    return false;
+                }
+                // the last item keys can partially match
+                let myKeys = myItem.keys();
+                let otherKeys = otherItem.keys();
+                let myIndexes = myItem.getIndexes();
+                let otherIndexes = otherItem.getIndexes();
+
+                if (myKeys.length > otherKeys.length || myIndexes.length > otherIndexes.length) {
+                    return false;
+                }
+
+                if (!allowSelf) {
+                    if (myKeys.length === otherKeys.length && myIndexes.length === otherIndexes.length) {
+                        return this.items_.length < path.items_.length;
+                    }
+                }
+
+                for (let j = 0; j < myKeys.length; j++) {
+                    if (!isEqual(myKeys[j], otherKeys[j])) {
+                        return false;
+                    }
+                }
+
+                for (let j = 0; j < myIndexes.length; j++) {
+                    if (myIndexes[j] !== otherIndexes[j]) {
+                        return false;
+                    }
+                }
+
             } else if (!isEqual(myItem, otherItem)) {
                 return false;
             }
-        }
-        if (!allowSelf && this.items_.length === path.items_.length) {
-            return false;
         }
         return true;
     };
@@ -432,6 +448,9 @@ export class Path implements Iterable<PathItem>{
                 });
                 p += '{' + keyStrs.join(',') + '}';
             }
+            else if (part.getIndexes().length > 0) {
+                p += '[' + part.getIndexes().join(",") + ']';
+            }
             txt.push(p);
         });
         return '/' + txt.join('/');
@@ -461,6 +480,36 @@ export class Path implements Iterable<PathItem>{
         }
         return new Path(newItems);
 
+    }
+    appendIndex(index: number) {
+        let newItems = [...this.items_];
+        let last = newItems.pop();
+        if (last == undefined) {
+            throw new Error("unable to set keys in root element");
+        }
+        newItems.push(last.appendIndex(index));
+        return new Path(newItems);
+    }
+
+    appendIndexes(index: number[]) {
+        let newItems = [...this.items_];
+        let last = newItems.pop();
+        if (last == undefined) {
+            throw new Error("unable to set keys in root element");
+        }
+        newItems.push(last.appendIndexes(index));
+        return new Path(newItems);
+
+    }
+
+        setIndex(index: number) {
+        let newItems = [...this.items_];
+        let last = newItems.pop();
+        if (last == undefined) {
+            throw new Error("unable to set keys in root element");
+        }
+        newItems.push(last.setIndex(index));
+        return new Path(newItems);
     }
 
     /**
@@ -513,7 +562,11 @@ export class Path implements Iterable<PathItem>{
             return this.items_[this.items_.length - 1].keys();
         }
         return [];
-    };
+    }
+
+    lastName():string {
+        return this.last().name();
+    }
 
     /**
      * just the keys of the lastItem
@@ -566,4 +619,41 @@ export class Path implements Iterable<PathItem>{
         return this.items_[pos];
     };
 
+    /**
+     * creats a new from this path to have the same number of items as the other path including keys
+     * @param path
+     */
+    truncateToLength(path: Path) {
+        let newItems = [];
+
+        if (path.length() > this.length()) {
+            throw new Error("Can't truncate path to length longer than itself");
+        }
+
+        for (let i = 0; i < path.length(); i++) {
+            newItems.push(this.items_[i]);
+        }
+
+        if (path.length() > 0){
+            let pathLast = path.last();
+            let myLast = newItems[newItems.length -1];
+
+            let pathKeyLen = pathLast.keyNames().length;
+            let pathIndexLen = pathLast.getIndexes().length;
+
+            if (myLast.keyNames().length < pathKeyLen || myLast.getIndexes().length < pathIndexLen) {
+                throw new Error("Can't truncate path to length longer than itself");
+            }
+
+            if (myLast.keyNames().length > pathKeyLen) {
+                myLast = new PathItem(myLast.name(), myLast.keyNames().slice(0, pathKeyLen), myLast.keys().slice(0, pathKeyLen));
+            }
+            if (myLast.getIndexes().length > pathIndexLen) {
+                myLast = new PathItem(myLast.name(), myLast.getIndexes().slice(0, pathIndexLen));
+            }
+            newItems[newItems.length - 1] = myLast;
+        }
+
+        return new Path(newItems);
+    }
 }

@@ -1,8 +1,8 @@
-import {Behaviour} from "../frp/frp";
-import {WidgetScope} from "./widgets/widgetscope";
-import {EventType} from "./dom/eventtype";
-import {append, createDom, removeNode} from "./dom/dom";
-import {WidgetHelper} from "./widgethelper";
+import {Behaviour} from "../frp/frp.ts";
+import {WidgetScope} from "./widgets/widgetscope.ts";
+import {EventType} from "./dom/eventtype.ts";
+import {append, createDom, removeNode} from "./dom/dom.ts";
+import {WidgetHelper} from "./widgethelper.ts";
 
 export type Unlistener = { unlisten: () => void, listen: () => void };
 export type EventCallback = EventListenerOrEventListenerObject | ((e: MouseEvent) => void) | ((e: KeyboardEvent) => void);
@@ -111,7 +111,7 @@ export class EventHelper<Type extends Event> {
      * @param {function(?)} cb
      * @return {function(?)}
      */
-    static makeLong(cb: (e: Event) => void): (e: any) => void {
+    static makeLong<ET extends Event>(cb: (e: ET) => void): (e: any) => void {
         return (e: any) => {
             let doit = function () {
                 try {
@@ -148,9 +148,6 @@ export class EventHelper<Type extends Event> {
         const listenFn = () => {
             if (!listening) {
                 listening = true;
-                if (type === "click") {
-                    console.log("listen", type, el)
-                }
                 el.addEventListener(type, callback as EventListenerOrEventListenerObject, options);
             }
         }
@@ -159,9 +156,6 @@ export class EventHelper<Type extends Event> {
             listen: listenFn,
             unlisten: () => {
                 if (listening) {
-                    if (type === "click") {
-                        console.log("unlisten", type, el)
-                    }
                     listening = false;
                     el.removeEventListener(type, callback as EventListenerOrEventListenerObject, options);
                 }

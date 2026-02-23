@@ -1,13 +1,13 @@
-import {Path, PathItem} from "./path";
+import {Path, PathItem} from "./path.ts";
+import {AvlTree} from "../structs/avltree.ts";
+import {compareKey} from "../util/object.ts";
+import {type Change} from "./change.ts";
 
 
 /**
  * @constructor
  * @private
  */
-import {AvlTree} from "../structs/avltree";
-import {compareKey} from "../util/object";
-import {Change} from "./change";
 
 export type ChangeMapNodeChild = {change:Change,ancestor:Change|null,pos:number[], hide?:boolean};
 
