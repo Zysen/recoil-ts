@@ -2,9 +2,9 @@
   "name": "recoil",
   "version": "1.0.0",
    "main": "src/main",
-   "exports": {
+   "exports": [
      "./src/frp/change_manager"
-   },
+   ],
   "type": "module",
   "scripts": {
     "dev": "vite",

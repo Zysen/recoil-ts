@@ -682,7 +682,8 @@ export class TreeView<Type> extends Widget {
 
     public static expandPath<Type>(
         tree: Tree<Type>, curState: ExpandInfoExpanded | boolean, path: string[],
-        doExpand: boolean, showRoot:boolean, collapseChildren: boolean) {
+        doExpand: boolean, showRoot:boolean = false, collapseChildren: boolean = false) {
+
         let state: ExpandInfoExpanded;
 
         if (curState === true) {

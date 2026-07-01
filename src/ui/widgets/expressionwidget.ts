@@ -45,8 +45,8 @@ export class ExprWidget extends Widget {
 
         let bound = ExprWidget.options.bind(frp, options);
 
-        let expConverterB = frp.liftB(function (dp) {
-            return new ExprConverter(dp);
+        let expConverterB = frp.liftB( (dp) => {
+            return new ExprConverter(dp) as StringConverter<string>;
         }, bound.decimalPlaces());
 
         let defConverter = new ExprFocusStringConverter();

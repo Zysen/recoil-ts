@@ -15,6 +15,7 @@ import {Message} from "../message.ts";
 import {BoolWithExplanation} from "../booleanwithexplain.ts";
 import {getGroup, StandardOptions, StandardOptionsType} from "../frp/util.ts";
 import {EnabledTooltipHelper} from "../tooltiphelper.ts";
+import { Keys } from "../dom/keycodes.ts";
 
 type BoundConfigType<InType> = {
     placeHolder: String | Message;
@@ -62,7 +63,7 @@ export class InputWidget<InType = string> extends Widget {
         this.getElement().appendChild(this.input_);
         this.getElement().appendChild(this.readonly_);
 
-        this.helper_ = new WidgetHelper(scope, this.element_, this, this.updateState_, {detach: this.detach_, attach: () => {}});
+        this.helper_ = new WidgetHelper(scope, this.element_, this, this.updateState_, {detach: () => this.detach_(), attach: () => {}});
         this.tootipHelper_ = new EnabledTooltipHelper(scope, this.element_, this.element_);
 
         this.changeHelper_ = new EventHelper(scope, this.input_, EventType.INPUT);
@@ -149,12 +150,12 @@ export class InputWidget<InType = string> extends Widget {
             let validator = this.configB_?.get().charValidator || (() => false);
 
             if (!this.configB_?.good() && this.configB_?.get().immediate) {
-                if (v.key === "Enter") {
+                if (v.key === Keys.ENTER) {
                     blurListener(v);
                     this.focusB_.set(true);
                 }
             }
-            if (v.key === "Escape") {
+            if (v.key === Keys.ESCAPE) {
                 if (this.valueB_?.metaGet().good() && this.configB_?.metaGet().good()) {
                     let t = this.configB_?.get().converter;
                     let strVal = t.convert(this.valueB_.get());
@@ -166,10 +167,10 @@ export class InputWidget<InType = string> extends Widget {
             }
             let ch = v.key
             // Allow: backspace, delete, tab, escape, enter
-            if (["F5", "Delete", "ArrowDown", "Tab", "Backspace", "Escape", "Enter"].includes(v.key) ||
+            if ([Keys.F5, Keys.DELETE, Keys.ARROW_DOWN, Keys.TAB, Keys.BACKSPACE, Keys.ESCAPE, Keys.ENTER].includes(v.key) ||
                 (["a", "c", "x",].includes(v.key) && v.ctrlKey === true) ||
-                (["ArrowRight","ArrowLeft","Home","End"].includes(v.key))) {
-                // let it happen, doon't do anything
+                ([Keys.ARROW_RIGHT,Keys.ARROW_LEFT,Keys.HOME,Keys.END].includes(v.key))) {
+                // let it happen, don't do anything
                 return;
             }
             if (!validator(ch)) {

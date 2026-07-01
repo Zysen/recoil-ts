@@ -54,7 +54,7 @@ export class MenuStructure {
     addSeparator(menus: string[]) {
         let menus1 = [...menus];
         menus1.push('');
-        this.add(menus1, null, function () {
+        this.add(menus1, null, () => {
             return new MenuSeparatorWidget();
         });
     }

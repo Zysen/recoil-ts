@@ -1,3 +1,19 @@
+import { Behaviour } from "../../frp/frp";
+import { AttachType } from "../../frp/struct";
+import { Box } from "../dom/box";
+import { append, createDom, removeChildren, setElementShown, setProperties } from "../dom/dom";
+import { EventType } from "../dom/eventtype";
+import { KeyCodes, Keys } from "../dom/keycodes";
+import { TagName } from "../dom/tags";
+import { EventHelper } from "../eventhelper";
+import { Options } from "../frp/util";
+import { Popup } from "../popup";
+import { AnchoredViewportPosition } from "../positioning/anchoredviewportposition";
+import { Corner } from "../positioning/positioning";
+import { WidgetHelper } from "../widgethelper";
+import { Widget } from "./widget";
+import { WidgetScope } from "./widgetscope";
+
 /**
  *
  * @template T
@@ -5,144 +21,135 @@
  * @implements {recoil.ui.Widget}
  * @constructor
  */
-recoil.ui.widgets.PopupWidget = function(scope) {
-    this.scope_ = scope;
-    this.popupContainer_ = goog.dom.createDom('div');
-    this.displayContainer_ = goog.dom.createDom(
-        'div',
-        {'class' : 'goog-inline-block goog-menu-button-caption', tabindex: 0});
-    this.buttonContainer_ = goog.dom.createDom('div', {'class' : 'goog-inline-block goog-menu-button-dropdown'});
-    this.displayAndButtonContainer_ = goog.dom.createDom('div', {'class' : 'goog-inline-block goog-menu-button'});
-    var outerBox = goog.dom.createDom('div', {'class' : 'goog-inline-block goog-menu-button-outer-box'});
-    var innerBox = goog.dom.createDom('div', {'class' : 'goog-inline-block goog-menu-button-inner-box'});
+export class PopupWidget extends Widget<HTMLDivElement> {    
+    private popupContainer_: HTMLDivElement;
+    private displayContainer_: HTMLDivElement;
+    private buttonContainer_: HTMLDivElement;
+    private displayAndButtonContainer_: HTMLDivElement;
+    private popup_:Popup;
+    private displayWidgetB_?: Behaviour<Widget>;
+    private popupWidgetB_?: Behaviour<Widget>;
+    private displayElement_?: Element;
+    private popupElement_?: Element;
+    private helper_:WidgetHelper;
 
-    goog.dom.append(this.displayAndButtonContainer_, outerBox);
-    goog.dom.append(outerBox, innerBox);
-    goog.dom.append(innerBox, this.displayContainer_);
-    goog.dom.append(innerBox, this.buttonContainer_);
+    constructor(scope: WidgetScope) {
+        super(scope, createDom(TagName.DIV));
+        this.popupContainer_ = createDom(TagName.DIV);
 
-    this.container_ = new goog.ui.Component();
-    var toControl = recoil.ui.ComponentWidgetHelper.elementToNoFocusControl;
+        this.displayContainer_ = createDom(
+            TagName.DIV,
+            { 'class': 'goog-inline-block goog-menu-button-caption', tabindex: 0 });
+        this.buttonContainer_ = createDom(TagName.DIV, { 'class': 'goog-inline-block goog-menu-button-dropdown' });
+        this.displayAndButtonContainer_ = createDom(TagName.DIV, { 'class': 'goog-inline-block goog-menu-button' });
+        let outerBox = createDom(TagName.DIV, { 'class': 'goog-inline-block goog-menu-button-outer-box' });
+        let innerBox = createDom(TagName.DIV, { 'class': 'goog-inline-block goog-menu-button-inner-box' });
 
-//    this.container_.addClassName("goog-inline-block");
+        append(this.displayAndButtonContainer_, outerBox);
+        append(outerBox, innerBox);
+        append(innerBox, this.displayContainer_);
+        append(innerBox, this.buttonContainer_);
 
-    var buttonControl = recoil.ui.ComponentWidgetHelper.elementToControl(this.displayAndButtonContainer_);
-    this.container_.addChild(buttonControl, true);
-    this.container_.addChild(toControl(this.popupContainer_), true);
-    this.popup_ = new goog.ui.Popup(this.popupContainer_);
-    goog.dom.setProperties(this.popupContainer_, {class: 'recoil-popup'});
+        this.getElement().appendChild(this.displayAndButtonContainer_);
+        this.getElement().appendChild(this.popupContainer_);
+        this.popup_ = new Popup(this.popupContainer_);
+        setProperties(this.popupContainer_, { class: 'recoil-popup' });
 
-    this.popup_.setVisible(false);
-    var me = this;
-    var doPopup = function() {
-        me.popup_.setVisible(false);
-        me.popup_.setPinnedCorner(goog.positioning.Corner.TOP_LEFT); // button corner
-        me.popup_.setMargin(new goog.math.Box(0, 0, 0, 0));
-        me.popup_.setPosition(new goog.positioning.AnchoredViewportPosition(me.displayAndButtonContainer_,
-        goog.positioning.Corner.BOTTOM_LEFT));
+        this.popup_.setVisible(false);
+        let doPopup = () => {
+            this.popup_.setVisible(false);
+            this.popup_.setPinnedCorner(Corner.TOP_LEFT); // button corner
+            this.popup_.setMargin(new Box(0, 0, 0, 0));
+            this.popup_.setPosition(new AnchoredViewportPosition(this.displayAndButtonContainer_,
+                Corner.BOTTOM_LEFT));
 
-        me.popup_.setVisible(true);
+            this.popup_.setVisible(true);
 
+        };
+        this.displayAndButtonContainer_.onmousedown = doPopup;
+
+        EventHelper.listen(this.displayAndButtonContainer_
+            , EventType.KEYDOWN,
+            (e: KeyboardEvent) => {
+                if (e.key === Keys.SPACE) {
+
+                    if (this.popup_.isVisible()) {
+                        setElementShown(this.popupContainer_, false)
+                    }
+                    else {
+                        doPopup();
+                    }
+                }
+                else if (e.key === Keys.ESCAPE) {
+                    setElementShown(this.popupContainer_, false)
+                }
+
+            });
+
+        this.popup_.setHideOnEscape(true);
+        this.popup_.setAutoHide(true);
+        this.helper_ = new WidgetHelper(scope, this.getElement(), this, this.updateState_);
     };
-    this.displayAndButtonContainer_.onmousedown = doPopup;
 
-    goog.events.listen(this.displayAndButtonContainer_
-, goog.events.EventType.KEYDOWN,
-                       function(e) {
-                               console.log(e.keyCode);
-                           if (e.keyCode === goog.events.KeyCodes.SPACE) {
-                               if (me.popup_.isVisible()) {
-                                   me.popup_.setVisible(false);
-                               }
-                               else {
-                                   doPopup();
-                               }
-                           }
-                           else if (e.keyCode === goog.events.KeyCodes.ESC) {
-                               me.popup_.setVisible(false);
-                           }
+    static options = Options('displayWidget', 'popupWidget');
 
-                       });
-    goog.events.listen(this.popup_.getElement(), goog.events.EventType.BLUR, function(e) {
-        console.log('bluring popup');
-    });
+    /**
+     * @param popupWidget the widget that will be displayed in the popup
+     * @param displayWidget the widget that will be displayed normally (no popup required
+     * @suppress {missingProperties}
+     */
 
-    this.popup_.setHideOnEscape(true);
-    this.popup_.setAutoHide(true);
-    this.helper_ = new recoil.ui.ComponentWidgetHelper(scope, this.container_, this, this.updateState_);
-};
-
-
-/**
- */
-recoil.ui.widgets.PopupWidget.options = recoil.frp.Util.Options('popupWidget', 'displayWidget');
-
-/**
- * @param {!recoil.frp.Behaviour<!recoil.ui.Widget>|!recoil.ui.Widget} popupWidget the widget that will be displayed in the popup
- * @param {!recoil.frp.Behaviour<!recoil.ui.Widget>|!recoil.ui.Widget} displayWidget the widget that will be displayed normally (no popup required
- * @suppress {missingProperties}
- */
-
-recoil.ui.widgets.PopupWidget.prototype.attach = function(popupWidget, displayWidget)  {
-    recoil.ui.widgets.PopupWidget.options.displayWidget(displayWidget).popupWidget(popupWidget).attach(this);
-};
-
-
-/**
- * see recoil.ui.widgets.PopupWidget.options fro valid options
- * @param {!Object|!recoil.frp.Behaviour<Object>} options
- * @suppress {missingProperties}
- */
-recoil.ui.widgets.PopupWidget.prototype.attachStruct = function(options) {
-    var frp = this.helper_.getFrp();
-    var bound = recoil.ui.widgets.PopupWidget.options.bind(frp, options);
-
-    this.displayWidgetB = bound.displayWidget();
-    this.popupWidgetB = bound.popupWidget();
-
-    this.helper_.attach(this.popupWidgetB, this.displayWidgetB);
-
-};
-
-/**
- * @private
- * @param {!Element} container where the component goes
- * @param {goog.ui.Component} current the currently renderd component
- * @param {goog.ui.Component} newComponent the component we want to render
- * @return {goog.ui.Component} the new Component
- */
-recoil.ui.widgets.PopupWidget.prototype.replaceComponent_ = function(container, current, newComponent) {
-    if (current !== newComponent) {
-        goog.dom.removeChildren(container);
-        newComponent.render(container);
+    attach(popupWidget:Widget|Behaviour<Widget>, displayWidget:Widget|Behaviour<Widget>) {
+        PopupWidget.options.displayWidget(displayWidget).popupWidget(popupWidget).attach(this);
     }
-    return newComponent;
-};
-/**
- *
- * @param {recoil.ui.WidgetHelper} helper
- * @private
- */
-recoil.ui.widgets.PopupWidget.prototype.updateState_ = function(helper) {
-    if (helper.isGood()) {
-        this.displayComponent_ = this.replaceComponent_(this.displayContainer_, this.displayComponent_, this.displayWidgetB.get().getComponent());
-        this.popupComponent_ = this.replaceComponent_(this.popupContainer_, this.popupComponent_, this.popupWidgetB.get().getComponent());
+
+
+    /**
+     * see recoil.ui.widgets.PopupWidget.options fro valid options
+     * @param {!Object|!recoil.frp.Behaviour<Object>} options
+     * @suppress {missingProperties}
+     */
+    attachStruct(data: AttachType<
+    {
+        popupWidget: Widget,
+        displayWidget: Widget
+    }>) {
+        var frp = this.scope_.getFrp();
+        var bound = PopupWidget.options.bind(frp, data);
+
+        this.displayWidgetB_ = bound.displayWidget();
+        this.popupWidgetB_ = bound.popupWidget();
+
+        this.helper_.attach(this.popupWidgetB_, this.displayWidgetB_);
+
     }
-    else {
+
+    /**
+     * @private
+     * @param {!Element} container where the component goes
+     * @param {goog.ui.Component} current the currently renderd component
+     * @param {goog.ui.Component} newComponent the component we want to render
+     * @return {goog.ui.Component} the new Component
+     */
+    private replaceComponent_<Type extends Element> (container:Element, current:Type|undefined, newComponent:Type) : Type {
+        if (current !== newComponent) {
+            removeChildren(container);
+            container.appendChild(newComponent);
+        }
+        return newComponent;
     }
-};
+    /**
+     *
+     * @param {recoil.ui.WidgetHelper} helper
+     * @private
+     */
+    updateState_(helper:WidgetHelper) {
+        if (helper.isGood() && this.displayWidgetB_ && this.popupWidgetB_) {
+            this.displayElement_ = this.replaceComponent_(this.displayContainer_, this.displayElement_, this.displayWidgetB_.get().getElement());
+            this.popupElement_ = this.replaceComponent_(this.popupContainer_, this.popupElement_, this.popupWidgetB_.get().getElement());
+        }
+        else {
+        }
+    }
 
-/**
- * @return {!goog.ui.Component}
- */
-recoil.ui.widgets.PopupWidget.prototype.getComponent = function() {
-    return this.container_;
-};
-
-/**
- * all widgets should not allow themselves to be flatterned
- *
- * @type {!Object}
- */
-
-recoil.ui.widgets.PopupWidget.prototype.flatten = recoil.frp.struct.NO_FLATTEN;
+}

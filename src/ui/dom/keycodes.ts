@@ -30,8 +30,36 @@ type BrowserEvent = MouseEvent|KeyboardEvent|SubmitEvent|Event|InputEvent|FocusE
  * @enum {number}
  */
 export class Keys {
-    static ENTER = "Enter";
-    static SHIFT = "Enter";
+    static readonly ESCAPE = "Escape";
+    static readonly ENTER = "Enter";
+    static readonly SHIFT = "Shift";
+    static readonly TAB = "Tab";
+    static readonly BACKSPACE = "Backspace";
+    static readonly DELETE = "Delete";
+
+    static readonly ARROW_DOWN = 'ArrowDown';
+    static readonly ARROW_LEFT = 'ArrowLeft';
+    static readonly ARROW_RIGHT = 'ArrowRight';
+    static readonly ARROW_UP = 'ArrowUp';
+
+    static readonly HOME = "Home";
+    static readonly END = "End";
+    static readonly PAGE_DOWN = 'PageDown';
+    static readonly PAGE_UP = 'PageUp';
+    static readonly SPACE = " ";
+
+    static readonly F1 = "F1";
+    static readonly F2 = "F2";
+    static readonly F3 = "F3";
+    static readonly F4 = "F4";
+    static readonly F5 = "F5";
+    static readonly F6 = "F6";
+    static readonly F7 = "F7";
+    static readonly F8 = "F8";
+    static readonly F9 = "F9";
+    static readonly F10 = "F10";
+    static readonly F11 = "F11";
+    static readonly F12 = "F12";
 }
 export class KeyCodes {
     static readonly WIN_KEY_FF_LINUX = 0;

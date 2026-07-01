@@ -32,7 +32,7 @@ test("attach before added to dom", async() => {
         detachCount++;
     });
 
-    testee = new WidgetHelper(scope, element, me, update.listener, detach.listener);
+    testee = new WidgetHelper(scope, element, me, update.listener, {detach : detach.listener, attach: () => undefined});
 
     expect(updateCount).toBe(0);
     expect(detachCount).toBe(0);
@@ -111,7 +111,7 @@ test("attach after added to dom", async() => {
         detachCount++;
     });
 
-    testee = new WidgetHelper(scope, element, me, update.listener, detach.listener);
+    testee = new WidgetHelper(scope, element, me, update.listener,  {detach : detach.listener, attach: () => undefined});
 
     expect(updateCount).toBe(0);
     expect(detachCount).toBe(0);

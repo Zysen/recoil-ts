@@ -191,7 +191,7 @@ export abstract class PopupBase extends EventTarget{
      * Sets whether the Popup dismisses itself when the user clicks outside of it.
      * @param {boolean} autoHide Whether to autohide on an external click.
      */
-    private setAutoHide(autoHide:boolean) {
+    setAutoHide(autoHide:boolean) {
         this.ensureNotVisible_();
         this.autoHide_ = autoHide;
     }
@@ -224,7 +224,7 @@ export abstract class PopupBase extends EventTarget{
      * Sets whether the Popup dismisses itself on the escape key.
      * @param {boolean} hideOnEscape Whether to autohide on the escape key.
      */
-    private setHideOnEscape(hideOnEscape: boolean) {
+    setHideOnEscape(hideOnEscape: boolean) {
         this.ensureNotVisible_();
         this.hideOnEscape_ = hideOnEscape;
     }
@@ -306,7 +306,7 @@ export abstract class PopupBase extends EventTarget{
      *
      * @return {boolean} whether the popup is currently visible.
      */
-    protected isVisible() {
+    isVisible() {
         return this.isVisible_;
     }
 
@@ -341,9 +341,9 @@ export abstract class PopupBase extends EventTarget{
      * returns, isVisible() will always return the new state, even if
      * there is a transition.
      *
-     * @param {boolean} visible Desired visibility state.
+     * @param visible Desired visibility state.
      */
-    protected setVisible(visible: boolean) {
+    setVisible(visible: boolean) {
         // Make sure that any currently running transition is stopped.
         if (this.showTransition_) this.showTransition_.stop();
         if (this.hideTransition_) this.hideTransition_.stop();
