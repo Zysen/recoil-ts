@@ -1,0 +1,4 @@
+{
+  "entry": "src/browser.ts",
+  "outFile": "index.js"
+}
