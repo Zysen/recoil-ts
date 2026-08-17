@@ -1,14 +1,7 @@
 {
   "name": "@client/recoil",
   "version": "1.0.0",
-<<<<<<< Updated upstream
-   "main": "src/main",
-   "exports": [
-     "./src/frp/change_manager"
-   ],
-=======
   "private": true,
->>>>>>> Stashed changes
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
