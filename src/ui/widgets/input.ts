@@ -381,7 +381,7 @@ export class InputWidget<InType = string> extends Widget {
 
     private updateState_(helper: WidgetHelper) {
         this.input_.disabled = !(helper.isGood() && this.enabledB_?.get().val());
-        this.input_.placeholder = this.configB_?.metaGet().good() && this.configB_.get().placeHolder?.toString() || '';
+        this.input_.placeholder = this.configB_?.metaGet().good() && this.configB_.get().placeholder?.toString() || '';
         let editable = !!(this.configB_?.metaGet().good() && this.configB_.get().editable);
 
         setElementShown(this.readonly_, !editable);

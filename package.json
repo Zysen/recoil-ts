@@ -10,7 +10,10 @@
       "import": "./src/browser.ts"
     }
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "dev": "vite",
     "test": "jest"

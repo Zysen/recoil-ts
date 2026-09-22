@@ -1010,7 +1010,10 @@ export class TableWidget extends Widget<HTMLDivElement> implements AttachableWid
                 }
                 if (newRowDec.outer) {
                     EventHelper.listen(newRowDec.outer, EventType.CLICK, EventHelper.makeLong((e: MouseEvent) => {
-                        frp.accessTrans(() => this.rowClickEvent_.set({event: e, data: row.key}));
+                        frp.accessTrans(
+                            () => this.rowClickEvent_.set({event: e, data: row.key}),
+                            this.rowClickEvent_,
+                        );
                     }));
                     if (row.outer) {
                         insertSiblingAfter(newRowDec.outer, row.outer);
@@ -1258,7 +1261,10 @@ export class TableWidget extends Widget<HTMLDivElement> implements AttachableWid
                 };
                 if (rowComponent.outer) {
                     EventHelper.listen(rowComponent.outer, EventType.CLICK, EventHelper.makeLong((e: MouseEvent) => {
-                        frp.accessTrans(() => this.rowClickEvent_.set({event: e, data: row.key}));
+                        frp.accessTrans(
+                            () => this.rowClickEvent_.set({event: e, data: row.key}),
+                            this.rowClickEvent_,
+                        );
                     }));
                 }
 
