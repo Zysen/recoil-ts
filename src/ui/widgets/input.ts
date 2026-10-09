@@ -17,7 +17,7 @@ import {getGroup, StandardOptions, StandardOptionsType} from "../frp/util.ts";
 import {EnabledTooltipHelper} from "../tooltiphelper.ts";
 
 type BoundConfigType<InType> = {
-    placeHolder: String | Message;
+    placeholder: String | Message;
     immediate: boolean;
     maxLength: number | undefined;
     converter: StringConverter<InType>;
