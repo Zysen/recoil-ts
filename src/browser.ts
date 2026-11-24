@@ -20,3 +20,6 @@ export { SelectColumn } from "./ui/widgets/table/select_column.ts";
 export { LabelColumn } from "./ui/widgets/table/label_column.ts";
 export { TableWidget, SelectionMode } from "./ui/widgets/table/table_widget.ts";
 export { PagedTableWidget } from "./ui/widgets/table/pagedtable.ts";
+
+export { Tooltip } from "./ui/tooltip.ts";
+export { createFileBrowserShell, createFileBrowserTable, createFileBrowserEntryRow, type FileBrowserEntry } from "./ui/widgets/file_browser.ts";
